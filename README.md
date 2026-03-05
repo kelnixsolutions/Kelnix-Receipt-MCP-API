@@ -50,6 +50,7 @@ A production-ready, agent-native MCP server that converts receipt images and PDF
   - [Environment Variables](#environment-variables)
 - [File Structure](#file-structure)
 - [Marketing Strategy](#marketing-strategy)
+- [Launch Checklist](#launch-checklist)
 - [License](#license)
 
 ---
@@ -714,6 +715,7 @@ The server starts at `http://localhost:8000`.
 ├── requirements.txt       # Python dependencies
 ├── CREDENTIALS_NEEDED.md  # All required API keys and setup instructions
 ├── MARKETING.md           # Go-to-market strategy for AI agent distribution
+├── LAUNCH_CHECKLIST.md    # Step-by-step launch instructions (don't skip this)
 ├── .gitignore
 └── README.md
 ```
@@ -731,6 +733,19 @@ See [MARKETING.md](MARKETING.md) for the complete go-to-market playbook covering
 - **Metrics** -- Registration, activation, revenue, and retention targets
 - **Competitive moat** -- Why this is defensible long-term
 - **Partnerships** -- Anthropic, LangChain, CrewAI, Composio
+
+---
+
+## Launch Checklist
+
+See [LAUNCH_CHECKLIST.md](LAUNCH_CHECKLIST.md) for the complete step-by-step guide to making this tool discoverable. Covers:
+
+1. **Deploy** -- hosting options (Railway, Fly.io, Render), env vars, verification
+2. **GitHub** -- topics, description, website URL to add
+3. **MCP Registries** -- exact steps for Smithery, Composio, Glama, Arcade.dev
+4. **Framework Ecosystem** -- PRs to submit for LangChain and CrewAI community tools
+5. **Content & Social** -- Hacker News post template, Twitter thread template, Reddit subs, Discord channels, blog outline
+6. **Ongoing** -- weekly, monthly, and quarterly maintenance tasks
 
 ---
 
