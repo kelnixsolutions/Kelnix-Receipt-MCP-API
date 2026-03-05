@@ -12,6 +12,7 @@ import httpx
 
 import db
 from models import (
+    CheckBalanceResponse,
     ConfidenceScores,
     GetReceiptMarkdownResponse,
     LineItem,
@@ -93,6 +94,7 @@ async def upload_receipt(
     file_bytes: bytes | None,
     url: str | None,
     mime_type: str,
+    api_key: str | None = None,
 ) -> UploadReceiptResponse:
     receipt_id = uuid.uuid4().hex[:16]
 
@@ -109,7 +111,7 @@ async def upload_receipt(
     file_path = UPLOAD_DIR / f"{receipt_id}{ext}"
     file_path.write_bytes(file_bytes)
 
-    db.insert_receipt(receipt_id, str(file_path), mime_type)
+    db.insert_receipt(receipt_id, str(file_path), mime_type, api_key=api_key)
     return UploadReceiptResponse(receipt_id=receipt_id)
 
 
@@ -247,6 +249,15 @@ async def suggest_gl_account(
     return SuggestGLAccountResponse(**parsed)
 
 
+# ── check_balance ────────────────────────────────────────────────────────
+
+async def check_balance(api_key: str) -> CheckBalanceResponse:
+    agent = db.get_agent_by_api_key(api_key)
+    plan = agent["plan"] if agent else "free"
+    balance = db.get_credit_balance(api_key)
+    return CheckBalanceResponse(credits=balance, plan=plan)
+
+
 # ── MCP tool descriptor generator ───────────────────────────────────────
 
 def get_mcp_tools() -> list[dict[str, Any]]:
@@ -300,6 +311,7 @@ def get_mcp_tools() -> list[dict[str, Any]]:
                 "rate_limit": "60 requests/min",
                 "max_file_size": "10 MB",
                 "cost": "free",
+                "setup_required": "register_agent",
             },
         },
         {
@@ -307,7 +319,8 @@ def get_mcp_tools() -> list[dict[str, Any]]:
             "description": (
                 "Process an uploaded receipt using Claude Sonnet 4.6 vision to extract structured "
                 "expense data. Returns merchant, date, total, currency, line items, taxes, "
-                "category, confidence scores, and reasoning. This is the core extraction tool."
+                "category, confidence scores, and reasoning. This is the core extraction tool. "
+                "Costs 1 credit per call. Use check_balance first to verify sufficient credits."
             ),
             "parameters": {
                 "type": "object",
@@ -346,6 +359,14 @@ def get_mcp_tools() -> list[dict[str, Any]]:
                             },
                         },
                     },
+                    "async_mode": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": (
+                            "If true, queue processing via Celery and return a task_id "
+                            "instead of blocking. Check status via /tasks/{task_id}."
+                        ),
+                    },
                 },
                 "required": ["receipt_id"],
             },
@@ -364,8 +385,9 @@ def get_mcp_tools() -> list[dict[str, Any]]:
             "constraints": {
                 "auth": "API key required (X-API-Key header)",
                 "rate_limit": "30 requests/min",
-                "cost": "1 credit (~$0.01-0.05 per call)",
-                "latency": "2-10 seconds typical",
+                "cost": "1 credit per call (~$0.05-0.12)",
+                "latency": "2-10 seconds (sync), instant (async)",
+                "setup_required": "register_agent",
             },
         },
         {
@@ -399,6 +421,7 @@ def get_mcp_tools() -> list[dict[str, Any]]:
                 "rate_limit": "60 requests/min",
                 "cost": "free (uses cached data)",
                 "prerequisite": "Receipt must be processed first via process_receipt",
+                "setup_required": "register_agent",
             },
         },
         {
@@ -452,6 +475,109 @@ def get_mcp_tools() -> list[dict[str, Any]]:
                 "auth": "API key required (X-API-Key header)",
                 "rate_limit": "30 requests/min",
                 "cost": "1 credit",
+                "setup_required": "register_agent",
+            },
+        },
+        {
+            "name": "check_balance",
+            "description": (
+                "Check your current credit balance and subscription plan. "
+                "Call this before process_receipt to ensure you have sufficient credits. "
+                "Returns current credit count and plan name."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+            "examples": [
+                {
+                    "input": {},
+                    "output": {"credits": 47, "plan": "free"},
+                },
+                {
+                    "input": {},
+                    "output": {"credits": 1842, "plan": "pro"},
+                },
+            ],
+            "constraints": {
+                "auth": "API key required (X-API-Key header)",
+                "rate_limit": "120 requests/min",
+                "cost": "free",
+                "setup_required": "register_agent",
+            },
+        },
+        {
+            "name": "buy_credits_crypto",
+            "description": (
+                "Purchase credits using any of 300+ supported cryptocurrencies (BTC, ETH, SOL, "
+                "USDC, USDT, DOGE, LTC, etc.). Credits are priced in USD. You specify the "
+                "crypto coin and the amount is dynamically quoted at the current exchange rate. "
+                "The fiat value is locked at quote time. Payment address and amount are returned "
+                "immediately. Expiry is ~20 minutes."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "credits": {
+                        "type": "integer",
+                        "description": "Number of credits to buy (uses pack pricing). Provide this OR fiat_usd.",
+                    },
+                    "fiat_usd": {
+                        "type": "number",
+                        "description": "Exact USD amount to pay. Provide this OR credits.",
+                    },
+                    "preferred_coin": {
+                        "type": "string",
+                        "default": "btc",
+                        "description": (
+                            "Cryptocurrency ticker to pay with. Examples: btc, eth, sol, "
+                            "usdc, usdt, doge, ltc, xmr, matic, avax, etc. "
+                            "300+ coins supported."
+                        ),
+                    },
+                },
+                "oneOf": [
+                    {"required": ["credits"]},
+                    {"required": ["fiat_usd"]},
+                ],
+            },
+            "examples": [
+                {
+                    "input": {"credits": 1000, "preferred_coin": "eth"},
+                    "output": {
+                        "payment_id": "5678901234",
+                        "quoted_crypto_amount": 0.0167,
+                        "currency": "ETH",
+                        "address": "0xabc123...",
+                        "expiry": "2026-03-04T15:30:00Z",
+                        "fiat_locked": 40.00,
+                        "rate_used": 2395.21,
+                        "credits": 1000,
+                    },
+                },
+                {
+                    "input": {"fiat_usd": 5.00, "preferred_coin": "usdc"},
+                    "output": {
+                        "payment_id": "5678901235",
+                        "quoted_crypto_amount": 5.00,
+                        "currency": "USDC",
+                        "address": "0xdef456...",
+                        "expiry": "2026-03-04T15:30:00Z",
+                        "fiat_locked": 5.00,
+                        "rate_used": 1.0,
+                        "credits": 100,
+                    },
+                },
+            ],
+            "constraints": {
+                "auth": "API key required (X-API-Key header)",
+                "rate_limit": "10 requests/min",
+                "cost": "free (payment is the cost)",
+                "crypto_any_supported": True,
+                "dynamic_fiat_lock": True,
+                "expiry_minutes": "15-20",
+                "setup_required": "register_agent",
             },
         },
     ]

@@ -106,3 +106,126 @@ class ReceiptStatus(str, enum.Enum):
     processing = "processing"
     processed = "processed"
     failed = "failed"
+
+
+# ── Agent registration ──────────────────────────────────────────────────
+
+class RegisterAgentRequest(BaseModel):
+    agent_name: str = Field(..., description="Name for this agent")
+    org_id: Optional[str] = Field(None, description="Organisation identifier")
+
+
+class RegisterAgentResponse(BaseModel):
+    api_key: str
+    agent_name: str
+    org_id: Optional[str]
+    stripe_customer_id: Optional[str]
+    free_credits: int
+
+
+# ── Billing ─────────────────────────────────────────────────────────────
+
+class BuyCreditsRequest(BaseModel):
+    credits: int = Field(
+        ...,
+        description="Number of credits to purchase. Valid packs: 100, 500, 1000, 5000, 10000",
+    )
+
+
+class BuyCreditsResponse(BaseModel):
+    checkout_url: str
+    session_id: str
+
+
+class SubscribeRequest(BaseModel):
+    plan: str = Field(
+        ..., description="Subscription plan: 'basic' (200 credits/mo, $15) or 'pro' (2000 credits/mo, $99)"
+    )
+
+
+class SubscribeResponse(BaseModel):
+    checkout_url: str
+    session_id: str
+
+
+class CreditHistoryEntry(BaseModel):
+    delta: int
+    reason: str
+    created_at: str
+
+
+class BalanceResponse(BaseModel):
+    credits: int
+    plan: str
+    history: list[CreditHistoryEntry]
+
+
+class CheckBalanceResponse(BaseModel):
+    credits: int
+    plan: str
+
+
+# ── Webhooks ────────────────────────────────────────────────────────────
+
+class SubscribeWebhookRequest(BaseModel):
+    url: str = Field(..., description="URL to POST webhook events to")
+    events: list[str] = Field(
+        ...,
+        description="Events to subscribe to: low_balance, processing_complete",
+    )
+
+
+class SubscribeWebhookResponse(BaseModel):
+    subscription_id: int
+    url: str
+    events: list[str]
+
+
+# ── Crypto payments ─────────────────────────────────────────────────────
+
+class BuyCreditsCryptoRequest(BaseModel):
+    credits: Optional[int] = Field(
+        None,
+        description="Number of credits to buy (uses standard pack pricing). Provide this OR fiat_usd.",
+    )
+    fiat_usd: Optional[float] = Field(
+        None,
+        description="Exact USD amount to pay. Provide this OR credits.",
+    )
+    preferred_coin: Optional[str] = Field(
+        "btc",
+        description="Cryptocurrency to pay with (e.g. btc, eth, sol, usdc, usdt, doge, ltc, etc.)",
+    )
+
+
+class BuyCreditsCryptoResponse(BaseModel):
+    payment_id: str
+    quoted_crypto_amount: float
+    currency: str
+    address: str
+    expiry: str
+    fiat_locked: float
+    rate_used: float
+    credits: int
+
+
+class CheckPaymentStatusRequest(BaseModel):
+    payment_id: str
+
+
+class CheckPaymentStatusResponse(BaseModel):
+    payment_id: str
+    status: str
+    pay_amount: float
+    actually_paid: float
+    pay_currency: str
+    fiat_locked: float
+    credits: int
+
+
+# ── Async processing ────────────────────────────────────────────────────
+
+class AsyncProcessReceiptResponse(BaseModel):
+    receipt_id: str
+    task_id: str
+    status: str = "queued"
