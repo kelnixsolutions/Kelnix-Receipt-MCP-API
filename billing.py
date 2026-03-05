@@ -46,6 +46,9 @@ def create_checkout_session(api_key: str, credits: int) -> dict[str, Any]:
         raise ValueError("Agent not found for this API key")
 
     price_cents = CREDIT_PACKS[credits]
+    if not stripe.api_key:
+        raise ValueError("Stripe is not configured. Set STRIPE_SECRET_KEY env var.")
+
     session = stripe.checkout.Session.create(
         mode="payment",
         customer=agent["stripe_customer_id"] or None,
@@ -87,6 +90,9 @@ def create_subscription_session(api_key: str, plan: str) -> dict[str, Any]:
     agent = db.get_agent_by_api_key(api_key)
     if agent is None:
         raise ValueError("Agent not found for this API key")
+
+    if not stripe.api_key:
+        raise ValueError("Stripe is not configured. Set STRIPE_SECRET_KEY env var.")
 
     session = stripe.checkout.Session.create(
         mode="subscription",

@@ -397,34 +397,70 @@ async def process_receipt_async_endpoint(
     _key: str = CreditAuth,
 ):
     """Queue receipt processing via Celery. Returns a task_id for polling."""
-    from tasks import process_receipt_async
+    # Quick Redis connectivity check to avoid blocking on dead connections
+    import asyncio
+    import socket
 
-    opts = body.options
-    task = process_receipt_async.delay(
-        body.receipt_id,
-        _key,
-        company_context=opts.company_context if opts else None,
-        preferred_currency=opts.preferred_currency if opts else None,
-        force_category=opts.force_category if opts else None,
-    )
-    return AsyncProcessReceiptResponse(
-        receipt_id=body.receipt_id, task_id=task.id, status="queued"
-    )
+    redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(redis_url)
+        host = parsed.hostname or "localhost"
+        port = parsed.port or 6379
+        s = socket.create_connection((host, port), timeout=1)
+        s.close()
+    except (OSError, ConnectionRefusedError):
+        raise HTTPException(
+            status_code=503,
+            detail="Async processing unavailable: cannot connect to Redis. Set REDIS_URL and ensure Redis is running.",
+        )
+
+    try:
+        from tasks import process_receipt_async
+
+        opts = body.options
+        loop = asyncio.get_event_loop()
+        task = await loop.run_in_executor(
+            None,
+            lambda: process_receipt_async.apply_async(
+                args=[body.receipt_id, _key],
+                kwargs={
+                    "company_context": opts.company_context if opts else None,
+                    "preferred_currency": opts.preferred_currency if opts else None,
+                    "force_category": opts.force_category if opts else None,
+                },
+                retry=False,
+            ),
+        )
+        return AsyncProcessReceiptResponse(
+            receipt_id=body.receipt_id, task_id=task.id, status="queued"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Async processing unavailable (Redis/Celery not running): {type(e).__name__}: {e}",
+        )
 
 
 @app.get("/tasks/{task_id}", tags=["Tools"])
 async def get_task_status(task_id: str, _key: str = Auth):
     """Check the status of an async processing task."""
-    from tasks import celery_app
+    try:
+        from tasks import celery_app
 
-    result = celery_app.AsyncResult(task_id)
-    response: dict = {"task_id": task_id, "status": result.status}
-    if result.ready():
-        if result.successful():
-            response["result"] = result.result
-        else:
-            response["error"] = str(result.result)
-    return response
+        result = celery_app.AsyncResult(task_id)
+        response: dict = {"task_id": task_id, "status": result.status}
+        if result.ready():
+            if result.successful():
+                response["result"] = result.result
+            else:
+                response["error"] = str(result.result)
+        return response
+    except Exception as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Task status unavailable (Redis not running): {type(e).__name__}: {e}",
+        )
 
 
 @app.post(
