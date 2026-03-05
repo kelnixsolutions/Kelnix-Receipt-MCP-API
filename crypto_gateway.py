@@ -9,46 +9,53 @@ NOWPAYMENTS_API_KEY = os.environ.get("NOWPAYMENTS_API_KEY", "")
 NOWPAYMENTS_IPN_SECRET = os.environ.get("NOWPAYMENTS_IPN_SECRET", "")
 NOWPAYMENTS_BASE = "https://api.nowpayments.io/v1"
 
+# Persistent async client — reused across requests to avoid connection overhead
+_client: httpx.AsyncClient | None = None
 
-def _headers() -> dict[str, str]:
-    return {"x-api-key": NOWPAYMENTS_API_KEY, "Content-Type": "application/json"}
+
+def _get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None or _client.is_closed:
+        _client = httpx.AsyncClient(
+            base_url=NOWPAYMENTS_BASE,
+            headers={"x-api-key": NOWPAYMENTS_API_KEY, "Content-Type": "application/json"},
+            timeout=15,
+        )
+    return _client
 
 
 async def get_available_currencies() -> list[str]:
     """Return list of supported cryptocurrency tickers."""
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.get(
-            f"{NOWPAYMENTS_BASE}/currencies", headers=_headers()
-        )
-        resp.raise_for_status()
-        return resp.json().get("currencies", [])
+    client = _get_client()
+    resp = await client.get("/currencies")
+    resp.raise_for_status()
+    return resp.json().get("currencies", [])
 
 
 async def get_estimated_price(
     fiat_amount: float, fiat_currency: str, crypto_currency: str
 ) -> dict[str, Any]:
     """Get estimated crypto amount for a given fiat amount."""
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.get(
-            f"{NOWPAYMENTS_BASE}/estimate",
-            params={
-                "amount": fiat_amount,
-                "currency_from": fiat_currency.lower(),
-                "currency_to": crypto_currency.lower(),
-            },
-            headers=_headers(),
+    client = _get_client()
+    resp = await client.get(
+        "/estimate",
+        params={
+            "amount": fiat_amount,
+            "currency_from": fiat_currency.lower(),
+            "currency_to": crypto_currency.lower(),
+        },
+    )
+    if resp.status_code != 200:
+        raise ValueError(
+            f"NOWPayments estimate failed ({resp.status_code}). "
+            "Check that NOWPAYMENTS_API_KEY is set correctly."
         )
-        if resp.status_code != 200:
-            raise ValueError(
-                f"NOWPayments estimate failed ({resp.status_code}). "
-                "Check that NOWPAYMENTS_API_KEY is set correctly."
-            )
-        data = resp.json()
-        est = float(data.get("estimated_amount", 0))
-        return {
-            "estimated_amount": est,
-            "rate": fiat_amount / est if est > 0 else 0,
-        }
+    data = resp.json()
+    est = float(data.get("estimated_amount", 0))
+    return {
+        "estimated_amount": est,
+        "rate": fiat_amount / est if est > 0 else 0,
+    }
 
 
 async def create_payment(
@@ -59,13 +66,7 @@ async def create_payment(
     order_description: str,
     ipn_callback_url: str | None = None,
 ) -> dict[str, Any]:
-    """
-    Create a NOWPayments invoice/payment.
-
-    Returns:
-        payment_id, pay_address, pay_amount, pay_currency,
-        expiration_estimate_date, purchase_id, etc.
-    """
+    """Create a NOWPayments invoice/payment."""
     payload: dict[str, Any] = {
         "price_amount": fiat_amount,
         "price_currency": fiat_currency.lower(),
@@ -76,18 +77,14 @@ async def create_payment(
     if ipn_callback_url:
         payload["ipn_callback_url"] = ipn_callback_url
 
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(
-            f"{NOWPAYMENTS_BASE}/payment",
-            json=payload,
-            headers=_headers(),
+    client = _get_client()
+    resp = await client.post("/payment", json=payload)
+    if resp.status_code not in (200, 201):
+        raise ValueError(
+            f"NOWPayments payment creation failed ({resp.status_code}). "
+            "Check that NOWPAYMENTS_API_KEY is set correctly."
         )
-        if resp.status_code != 200 and resp.status_code != 201:
-            raise ValueError(
-                f"NOWPayments payment creation failed ({resp.status_code}). "
-                "Check that NOWPAYMENTS_API_KEY is set correctly."
-            )
-        data = resp.json()
+    data = resp.json()
 
     return {
         "payment_id": str(data["payment_id"]),
@@ -104,17 +101,14 @@ async def create_payment(
 
 async def get_payment_status(payment_id: str) -> dict[str, Any]:
     """Check status of an existing payment."""
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.get(
-            f"{NOWPAYMENTS_BASE}/payment/{payment_id}",
-            headers=_headers(),
+    client = _get_client()
+    resp = await client.get(f"/payment/{payment_id}")
+    if resp.status_code != 200:
+        raise ValueError(
+            f"NOWPayments status check failed ({resp.status_code}). "
+            "Check that NOWPAYMENTS_API_KEY is set correctly."
         )
-        if resp.status_code != 200:
-            raise ValueError(
-                f"NOWPayments status check failed ({resp.status_code}). "
-                "Check that NOWPAYMENTS_API_KEY is set correctly."
-            )
-        data = resp.json()
+    data = resp.json()
 
     return {
         "payment_id": str(data["payment_id"]),
@@ -139,7 +133,7 @@ def verify_ipn_signature(payload: dict, received_sig: str) -> bool:
     import json
 
     sorted_payload = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-    expected = hmac.new(
+    expected = hmac.HMAC(
         NOWPAYMENTS_IPN_SECRET.encode(),
         sorted_payload.encode(),
         hashlib.sha512,

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import secrets
 import sqlite3
+import threading
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Optional
@@ -65,7 +66,47 @@ CREATE TABLE IF NOT EXISTS crypto_payments (
     updated_at          TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (api_key) REFERENCES agents(api_key)
 );
+
+CREATE TABLE IF NOT EXISTS idempotency_keys (
+    idem_key    TEXT PRIMARY KEY,
+    api_key     TEXT NOT NULL,
+    receipt_id  TEXT NOT NULL,
+    result_json TEXT,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_receipts_api_key ON receipts(api_key);
+CREATE INDEX IF NOT EXISTS idx_credits_api_key ON credits(api_key);
+CREATE INDEX IF NOT EXISTS idx_crypto_payments_api_key ON crypto_payments(api_key);
 """
+
+# ── Connection pool ──────────────────────────────────────────────────────
+# One persistent connection per thread. SQLite serializes writes internally,
+# but reusing connections avoids the open/close overhead on every call.
+
+_local = threading.local()
+
+
+def _get_conn() -> sqlite3.Connection:
+    conn = getattr(_local, "conn", None)
+    if conn is None:
+        conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=5000")
+        _local.conn = conn
+    return conn
+
+
+@contextmanager
+def _conn():
+    conn = _get_conn()
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
 
 
 def init_db() -> None:
@@ -73,15 +114,28 @@ def init_db() -> None:
         conn.executescript(SCHEMA)
 
 
-@contextmanager
-def _conn():
-    conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    try:
-        yield conn
-        conn.commit()
-    finally:
-        conn.close()
+# ── API key cache ────────────────────────────────────────────────────────
+# Avoids a DB query on every authenticated request.
+
+import time
+
+_api_key_cache: dict[str, float] = {}  # api_key → expiry timestamp
+_CACHE_TTL = 300  # 5 minutes
+
+
+def api_key_exists(api_key: str) -> bool:
+    now = time.monotonic()
+    expiry = _api_key_cache.get(api_key)
+    if expiry and now < expiry:
+        return True
+    exists = get_agent_by_api_key(api_key) is not None
+    if exists:
+        _api_key_cache[api_key] = now + _CACHE_TTL
+    return exists
+
+
+def _invalidate_cache(api_key: str) -> None:
+    _api_key_cache.pop(api_key, None)
 
 
 # ── Receipts ─────────────────────────────────────────────────────────────
@@ -102,6 +156,19 @@ def get_receipt(receipt_id: str) -> Optional[dict[str, Any]]:
     if row is None:
         return None
     return dict(row)
+
+
+def list_receipts(api_key: str, limit: int = 50, status: str | None = None) -> list[dict[str, Any]]:
+    query = "SELECT receipt_id, status, mime_type, created_at, updated_at FROM receipts WHERE api_key = ?"
+    params: list[Any] = [api_key]
+    if status:
+        query += " AND status = ?"
+        params.append(status)
+    query += " ORDER BY created_at DESC LIMIT ?"
+    params.append(limit)
+    with _conn() as conn:
+        rows = conn.execute(query, params).fetchall()
+    return [dict(r) for r in rows]
 
 
 def update_receipt(
@@ -152,8 +219,8 @@ def create_agent(agent_name: str, org_id: str | None = None) -> dict[str, Any]:
             "VALUES (?, ?, ?, ?)",
             (api_key, agent_name, org_id, stripe_customer_id),
         )
-    # Grant free credits
     add_credits(api_key, 50, reason="free_tier_signup")
+    _api_key_cache[api_key] = time.monotonic() + _CACHE_TTL
     return {
         "api_key": api_key,
         "agent_name": agent_name,
@@ -188,10 +255,6 @@ def update_agent(api_key: str, *, plan: str | None = None) -> None:
         )
 
 
-def api_key_exists(api_key: str) -> bool:
-    return get_agent_by_api_key(api_key) is not None
-
-
 # ── Credits ──────────────────────────────────────────────────────────────
 
 def add_credits(api_key: str, amount: int, reason: str) -> None:
@@ -208,6 +271,23 @@ def deduct_credits(api_key: str, amount: int, reason: str) -> None:
             "INSERT INTO credits (api_key, delta, reason) VALUES (?, ?, ?)",
             (api_key, -amount, reason),
         )
+
+
+def atomic_deduct_if_sufficient(api_key: str, cost: int, reason: str) -> bool:
+    """Atomically check balance and deduct in one transaction. Returns False if insufficient."""
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT COALESCE(SUM(delta), 0) AS balance FROM credits WHERE api_key = ?",
+            (api_key,),
+        ).fetchone()
+        balance = int(row["balance"])
+        if balance < cost:
+            return False
+        conn.execute(
+            "INSERT INTO credits (api_key, delta, reason) VALUES (?, ?, ?)",
+            (api_key, -cost, reason),
+        )
+    return True
 
 
 def get_credit_balance(api_key: str) -> int:
@@ -227,6 +307,28 @@ def get_credit_history(api_key: str, limit: int = 50) -> list[dict[str, Any]]:
             (api_key, limit),
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+# ── Idempotency ─────────────────────────────────────────────────────────
+
+def get_idempotent_result(idem_key: str, api_key: str) -> Optional[dict[str, Any]]:
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT result_json FROM idempotency_keys WHERE idem_key = ? AND api_key = ?",
+            (idem_key, api_key),
+        ).fetchone()
+    if row is None or row["result_json"] is None:
+        return None
+    return json.loads(row["result_json"])
+
+
+def set_idempotent_result(idem_key: str, api_key: str, receipt_id: str, result: dict) -> None:
+    with _conn() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO idempotency_keys (idem_key, api_key, receipt_id, result_json) "
+            "VALUES (?, ?, ?, ?)",
+            (idem_key, api_key, receipt_id, json.dumps(result)),
+        )
 
 
 # ── Webhook subscriptions ───────────────────────────────────────────────

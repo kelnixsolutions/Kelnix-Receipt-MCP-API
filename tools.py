@@ -7,6 +7,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Optional
 
+import aiofiles
 import anthropic
 import httpx
 
@@ -16,6 +17,7 @@ from models import (
     ConfidenceScores,
     GetReceiptMarkdownResponse,
     LineItem,
+    ListReceiptsResponse,
     ProcessReceiptResponse,
     ReceiptStatus,
     StructuredExpense,
@@ -109,7 +111,8 @@ async def upload_receipt(
 
     ext = _ext_from_mime(mime_type)
     file_path = UPLOAD_DIR / f"{receipt_id}{ext}"
-    file_path.write_bytes(file_bytes)
+    async with aiofiles.open(file_path, "wb") as f:
+        await f.write(file_bytes)
 
     db.insert_receipt(receipt_id, str(file_path), mime_type, api_key=api_key)
     return UploadReceiptResponse(receipt_id=receipt_id)
@@ -126,6 +129,14 @@ async def process_receipt(
     rec = db.get_receipt(receipt_id)
     if rec is None:
         raise ValueError(f"Receipt {receipt_id} not found")
+
+    # Return cached result if already processed
+    if rec["status"] == ReceiptStatus.processed.value and rec["result_json"]:
+        cached = json.loads(rec["result_json"])
+        return ProcessReceiptResponse(
+            receipt_id=receipt_id,
+            structured_expense=StructuredExpense(**cached),
+        )
 
     db.update_receipt(receipt_id, status=ReceiptStatus.processing.value)
 
@@ -258,9 +269,27 @@ async def check_balance(api_key: str) -> CheckBalanceResponse:
     return CheckBalanceResponse(credits=balance, plan=plan)
 
 
+# ── list_receipts ────────────────────────────────────────────────────────
+
+async def list_receipts(api_key: str, limit: int = 50, status: str | None = None) -> ListReceiptsResponse:
+    rows = db.list_receipts(api_key, limit=limit, status=status)
+    return ListReceiptsResponse(receipts=rows)
+
+
 # ── MCP tool descriptor generator ───────────────────────────────────────
 
+_mcp_cache: list[dict[str, Any]] | None = None
+
+
 def get_mcp_tools() -> list[dict[str, Any]]:
+    global _mcp_cache
+    if _mcp_cache is not None:
+        return _mcp_cache
+    _mcp_cache = _build_mcp_tools()
+    return _mcp_cache
+
+
+def _build_mcp_tools() -> list[dict[str, Any]]:
     return [
         {
             "name": "upload_receipt",
@@ -577,6 +606,106 @@ def get_mcp_tools() -> list[dict[str, Any]]:
                 "crypto_any_supported": True,
                 "dynamic_fiat_lock": True,
                 "expiry_minutes": "15-20",
+                "setup_required": "register_agent",
+            },
+        },
+        {
+            "name": "list_receipts",
+            "description": (
+                "List your uploaded receipts with their status. "
+                "Filter by status (uploaded, processing, processed, failed). "
+                "Returns receipt_id, status, mime_type, and timestamps."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Max number of receipts to return (1-200)",
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": ["uploaded", "processing", "processed", "failed"],
+                        "description": "Filter by receipt status",
+                    },
+                },
+                "required": [],
+            },
+            "examples": [
+                {
+                    "input": {"limit": 10, "status": "processed"},
+                    "output": {
+                        "receipts": [
+                            {
+                                "receipt_id": "a1b2c3d4e5f67890",
+                                "status": "processed",
+                                "mime_type": "image/jpeg",
+                                "created_at": "2026-03-04 10:00:00",
+                                "updated_at": "2026-03-04 10:00:05",
+                            }
+                        ]
+                    },
+                }
+            ],
+            "constraints": {
+                "auth": "API key required (X-API-Key header)",
+                "rate_limit": "60 requests/min",
+                "cost": "free",
+                "setup_required": "register_agent",
+            },
+        },
+        {
+            "name": "upload_and_process",
+            "description": (
+                "Upload and process a receipt in a single call. Combines upload_receipt + "
+                "process_receipt into one request. Costs 1 credit. Supports idempotency keys "
+                "to safely retry without double-charging."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file": {
+                        "type": "string",
+                        "format": "binary",
+                        "description": "Raw binary file content (multipart upload)",
+                    },
+                    "url": {
+                        "type": "string",
+                        "format": "uri",
+                        "description": "Public URL of the receipt image or PDF",
+                    },
+                    "mime_type": {
+                        "type": "string",
+                        "enum": ["image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf"],
+                        "description": "MIME type of the uploaded file",
+                    },
+                    "options": {
+                        "type": "object",
+                        "description": "Optional processing hints (company_context, preferred_currency, force_category)",
+                    },
+                    "idempotency_key": {
+                        "type": "string",
+                        "description": "Unique key to prevent duplicate processing on retries",
+                    },
+                },
+                "required": ["mime_type"],
+                "oneOf": [{"required": ["file"]}, {"required": ["url"]}],
+            },
+            "examples": [
+                {
+                    "input": {"url": "https://example.com/receipt.jpg", "mime_type": "image/jpeg"},
+                    "output": {
+                        "receipt_id": "a1b2c3d4e5f67890",
+                        "structured_expense": FEW_SHOT_EXAMPLE,
+                    },
+                }
+            ],
+            "constraints": {
+                "auth": "API key required (X-API-Key header)",
+                "rate_limit": "30 requests/min",
+                "cost": "1 credit per call",
+                "supports_idempotency": True,
                 "setup_required": "register_agent",
             },
         },

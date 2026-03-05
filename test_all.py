@@ -51,7 +51,7 @@ def run_tests():
     print("\n--- SYSTEM ---")
     r = client.get("/health")
     test("GET /health returns 200", r.status_code == 200)
-    test("/health has version 3.0.0", r.json().get("version") == "3.0.0", r.json())
+    test("/health has version 3.1.0", r.json().get("version") == "3.1.0", r.json())
 
     # ── 2. MCP Discovery ────────────────────────────────────────────
     print("\n--- MCP DISCOVERY ---")
@@ -59,9 +59,10 @@ def run_tests():
     test("GET /mcp returns 200", r.status_code == 200)
     tools = r.json()
     names = [t["name"] for t in tools]
-    test(f"MCP has 6 tools", len(tools) == 6, names)
+    test(f"MCP has 8 tools", len(tools) == 8, names)
     for expected in ["upload_receipt", "process_receipt", "get_receipt_markdown",
-                     "suggest_gl_account", "check_balance", "buy_credits_crypto"]:
+                     "suggest_gl_account", "check_balance", "buy_credits_crypto",
+                     "list_receipts", "upload_and_process"]:
         test(f"  tool '{expected}' present", expected in names)
 
     # Check MCP metadata quality
@@ -298,9 +299,40 @@ def run_tests():
 
     # Task status endpoint
     r = client.get("/tasks/fake-task-id", headers=headers)
-    test("GET /tasks/{id} endpoint exists", r.status_code in (200, 500))
+    test("GET /tasks/{id} endpoint exists", r.status_code in (200, 500, 503))
 
-    # ── 15. OpenAPI / Swagger docs ──────────────────────────────────
+    # ── 15. List Receipts ─────────────────────────────────────────────
+    print("\n--- LIST RECEIPTS ---")
+    r = client.post("/tools/list_receipts", headers=headers,
+        json={"limit": 10})
+    test("list_receipts returns 200", r.status_code == 200)
+    lr = r.json()
+    test("list_receipts has receipts array", "receipts" in lr)
+    test("list_receipts has at least 1 receipt", len(lr["receipts"]) >= 1)
+
+    r = client.post("/tools/list_receipts", headers=headers,
+        json={"limit": 10, "status": "uploaded"})
+    test("list_receipts with status filter returns 200", r.status_code == 200)
+
+    # ── 16. Upload and Process combo ──────────────────────────────────
+    print("\n--- UPLOAD AND PROCESS COMBO ---")
+    r = client.post("/tools/upload_and_process",
+        headers=headers,
+        files={"file": ("receipt.png", io.BytesIO(png_bytes), "image/png")},
+        data={"mime_type": "image/png"})
+    test("upload_and_process endpoint exists",
+         r.status_code in (200, 500), f"status={r.status_code}")
+
+    # ── 17. Request ID middleware ─────────────────────────────────────
+    print("\n--- REQUEST ID MIDDLEWARE ---")
+    r = client.get("/health")
+    test("Response has X-Request-ID header", "x-request-id" in r.headers)
+
+    r = client.get("/health", headers={"X-Request-ID": "test-req-123"})
+    test("Custom request ID echoed back",
+         r.headers.get("x-request-id") == "test-req-123")
+
+    # ── 18. OpenAPI / Swagger docs ────────────────────────────────────
     print("\n--- OPENAPI DOCS ---")
     r = client.get("/docs")
     test("GET /docs returns 200", r.status_code == 200)
@@ -309,7 +341,7 @@ def run_tests():
     test("GET /openapi.json returns 200", r.status_code == 200)
     spec = r.json()
     paths = list(spec.get("paths", {}).keys())
-    test(f"OpenAPI has {len(paths)} paths", len(paths) >= 15, paths)
+    test(f"OpenAPI has {len(paths)} paths", len(paths) >= 17, paths)
 
     # ── Summary ─────────────────────────────────────────────────────
     print(f"\n{'='*60}")

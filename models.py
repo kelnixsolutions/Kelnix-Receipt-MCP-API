@@ -223,6 +223,31 @@ class CheckPaymentStatusResponse(BaseModel):
     credits: int
 
 
+# ── List receipts ──────────────────────────────────────────────────────
+
+class ListReceiptsRequest(BaseModel):
+    limit: int = Field(50, ge=1, le=200, description="Max receipts to return")
+    status: Optional[str] = Field(None, description="Filter by status: uploaded, processing, processed, failed")
+
+
+class ListReceiptsResponse(BaseModel):
+    receipts: list[dict]
+
+
+# ── Upload and process combo ──────────────────────────────────────────
+
+class UploadAndProcessRequest(BaseModel):
+    url: Optional[str] = Field(None, description="Public URL of the receipt image/PDF")
+    mime_type: str = Field(..., description="MIME type of the file")
+    options: Optional[ProcessOptions] = None
+    idempotency_key: Optional[str] = Field(None, description="Unique key to prevent duplicate processing")
+
+
+class UploadAndProcessResponse(BaseModel):
+    receipt_id: str
+    structured_expense: StructuredExpense
+
+
 # ── Async processing ────────────────────────────────────────────────────
 
 class AsyncProcessReceiptResponse(BaseModel):

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import uuid
 from contextlib import asynccontextmanager
 from typing import Annotated
 
@@ -32,6 +33,8 @@ from models import (
     CreditHistoryEntry,
     GetReceiptMarkdownRequest,
     GetReceiptMarkdownResponse,
+    ListReceiptsRequest,
+    ListReceiptsResponse,
     ProcessReceiptRequest,
     ProcessReceiptResponse,
     RegisterAgentRequest,
@@ -42,6 +45,7 @@ from models import (
     SubscribeWebhookResponse,
     SuggestGLAccountRequest,
     SuggestGLAccountResponse,
+    UploadAndProcessResponse,
     UploadReceiptResponse,
 )
 from webhooks import check_low_balance
@@ -88,7 +92,7 @@ async def require_credits(x_api_key: Annotated[str, Header()]) -> str:
                 "subscribe_url": "/billing/subscribe",
             },
         )
-    check_low_balance(key)
+    await check_low_balance(key)
     return key
 
 
@@ -106,7 +110,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Receipt Accounting Entry MCP Server",
-    version="3.0.0",
+    version="3.1.0",
     description=(
         "Agent-native MCP server that converts receipt images/PDFs into "
         "structured accounting-ready JSON. Discover tools at /mcp. "
@@ -114,6 +118,16 @@ app = FastAPI(
     ),
     lifespan=lifespan,
 )
+
+
+# ── Request ID middleware ────────────────────────────────────────────────
+
+@app.middleware("http")
+async def add_request_id(request: Request, call_next):
+    request_id = request.headers.get("X-Request-ID", uuid.uuid4().hex[:12])
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    return response
 
 
 # ── MCP discovery endpoint ──────────────────────────────────────────────
@@ -508,8 +522,64 @@ async def check_balance_endpoint(_key: str = Auth):
     return await tools.check_balance(_key)
 
 
+# ── List receipts ────────────────────────────────────────────────────────
+
+@app.post(
+    "/tools/list_receipts",
+    response_model=ListReceiptsResponse,
+    tags=["Tools"],
+)
+async def list_receipts_endpoint(
+    body: ListReceiptsRequest,
+    _key: str = Auth,
+):
+    """List your receipts with optional status filter. Free to call."""
+    return await tools.list_receipts(_key, limit=body.limit, status=body.status)
+
+
+# ── Upload and process combo ─────────────────────────────────────────────
+
+@app.post(
+    "/tools/upload_and_process",
+    response_model=UploadAndProcessResponse,
+    tags=["Tools"],
+)
+async def upload_and_process_endpoint(
+    mime_type: Annotated[str, Form()],
+    _key: str = CreditAuth,
+    file: UploadFile | None = File(None),
+    url: str | None = Form(None),
+    idempotency_key: str | None = Form(None),
+):
+    """Upload + process a receipt in one call. Costs 1 credit. Supports idempotency."""
+    if idempotency_key:
+        cached = db.get_idempotent_result(idempotency_key, _key)
+        if cached is not None:
+            return JSONResponse(content=cached)
+
+    file_bytes: bytes | None = None
+    if file is not None:
+        file_bytes = await file.read()
+    if file_bytes is None and url is None:
+        raise HTTPException(status_code=400, detail="Provide either file or url")
+
+    try:
+        upload_resp = await tools.upload_receipt(file_bytes, url, mime_type, api_key=_key)
+        result = await tools.process_receipt(upload_resp.receipt_id)
+        response = result.model_dump()
+
+        if idempotency_key:
+            db.set_idempotent_result(idempotency_key, _key, upload_resp.receipt_id, response)
+
+        return response
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Processing failed: {e}")
+
+
 # ── Health ───────────────────────────────────────────────────────────────
 
 @app.get("/health", tags=["System"])
 async def health():
-    return {"status": "ok", "version": "3.0.0"}
+    return {"status": "ok", "version": "3.1.0"}

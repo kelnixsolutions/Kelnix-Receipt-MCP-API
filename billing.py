@@ -158,14 +158,13 @@ def handle_stripe_event(payload: bytes, sig_header: str) -> dict[str, str]:
 # ── Credit check ────────────────────────────────────────────────────────
 
 def check_and_deduct(api_key: str, cost: int = 1) -> None:
-    """Raise ValueError if insufficient credits. Otherwise deduct."""
-    balance = db.get_credit_balance(api_key)
-    if balance < cost:
+    """Raise ValueError if insufficient credits. Otherwise atomically deduct."""
+    if not db.atomic_deduct_if_sufficient(api_key, cost, reason="process_receipt"):
+        balance = db.get_credit_balance(api_key)
         raise ValueError(
             f"Insufficient credits: {balance} available, {cost} required. "
             f"Buy more at POST /billing/buy_credits or POST /billing/buy_credits_crypto"
         )
-    db.deduct_credits(api_key, cost, reason="process_receipt")
 
 
 # ── Crypto helpers ──────────────────────────────────────────────────────
