@@ -8,3 +8,4 @@ httpx>=0.28.0
 stripe>=11.0.0
 celery[redis]>=5.4.0
 redis>=5.2.0
+mcp>=1.0.0

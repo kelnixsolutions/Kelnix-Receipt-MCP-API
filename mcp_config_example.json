@@ -1,0 +1,21 @@
+{
+  "_comment": [
+    "Add this to your MCP client config to enable the Receipt MCP server.",
+    "",
+    "Claude Desktop: ~/Library/Application Support/Claude/claude_desktop_config.json",
+    "Cursor: .cursor/mcp.json in your project root",
+    "VS Code + Continue: .continue/config.json",
+    "",
+    "Update the 'command' path and env vars for your setup."
+  ],
+  "mcpServers": {
+    "receipt-accounting": {
+      "command": "python",
+      "args": ["/path/to/Receipt-Accounting-Entry-MCP-Server/mcp_server.py"],
+      "env": {
+        "ANTHROPIC_API_KEY": "sk-ant-your-key-here",
+        "RECEIPT_MCP_API_KEY": ""
+      }
+    }
+  }
+}

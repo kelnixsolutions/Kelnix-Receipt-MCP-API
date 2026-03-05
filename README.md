@@ -37,7 +37,12 @@ A production-ready, agent-native MCP server that converts receipt images and PDF
 - [Backend Choice Rationale](#backend-choice-rationale-march-2026)
   - [Claude Sonnet 4.6 Vision API](#recommended-claude-sonnet-46-vision-api)
   - [Fully Local with Ollama](#alternative-fully-local-with-ollama)
-- [Discovery Strategy for Agents](#discovery-strategy-for-agents)
+- [How Agents Find This Tool](#how-agents-find-this-tool)
+  - [1. MCP Protocol (stdio)](#1-mcp-protocol-stdio--claude-desktop-cursor-vs-code)
+  - [2. Well-Known Discovery](#2-well-known-discovery)
+  - [3. MCP Registries](#3-mcp-registries-smithery-composio-glama)
+  - [4. HTTP Discovery](#4-http-discovery-endpoint)
+  - [5. Framework Integrations](#5-framework-integrations)
 - [Project Status](#project-status)
 - [Setup](#setup)
   - [Prerequisites](#prerequisites)
@@ -498,14 +503,109 @@ All tools include `"setup_required": "register_agent"` in constraints. The `buy_
 
 ---
 
-## Discovery Strategy for Agents
+## How Agents Find This Tool
 
-1. **Public `/mcp` endpoint** -- Any agent can discover tools by hitting a single URL
-2. **MCP registries** -- Submit to Composio, StackOne, Arcade.dev tool directories
-3. **`/integrations` endpoint** -- Copy-paste quickstarts for LangGraph, CrewAI, AutoGen
-4. **GitHub visibility** -- Open-source server code, star-friendly README
-5. **Social proof** -- Tweet demo + MCP link with #AgentNative #MCPTools
-6. **API docs** -- Auto-generated Swagger UI at `/docs`
+There are **5 discovery layers**, from native MCP protocol to HTTP fallback:
+
+### 1. MCP Protocol (stdio) -- Claude Desktop, Cursor, VS Code
+
+The server speaks the **official MCP protocol** via `mcp_server.py`. Add it to your MCP client:
+
+**Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+```json
+{
+  "mcpServers": {
+    "receipt-accounting": {
+      "command": "python",
+      "args": ["/path/to/Receipt-Accounting-Entry-MCP-Server/mcp_server.py"],
+      "env": {
+        "ANTHROPIC_API_KEY": "sk-ant-your-key-here"
+      }
+    }
+  }
+}
+```
+
+**Cursor** (`.cursor/mcp.json` in your project):
+```json
+{
+  "mcpServers": {
+    "receipt-accounting": {
+      "command": "python",
+      "args": ["/path/to/mcp_server.py"],
+      "env": { "ANTHROPIC_API_KEY": "sk-ant-..." }
+    }
+  }
+}
+```
+
+Once configured, the agent can call `upload_receipt`, `process_receipt`, `suggest_gl_account`, etc. directly through the MCP protocol. No HTTP needed.
+
+### 2. Well-Known Discovery
+
+Any MCP-aware agent can hit `/.well-known/mcp.json` on your domain to discover the server:
+
+```bash
+curl https://your-server.com/.well-known/mcp.json
+```
+
+Returns server name, description, available transports (stdio + HTTP), registration URL, and tool count. This is the emerging standard for domain-level MCP discovery.
+
+### 3. MCP Registries (Smithery, Composio, Glama)
+
+The repo includes a `smithery.yaml` for listing on [Smithery.ai](https://smithery.ai) -- the largest MCP server registry. Agents and developers search Smithery to find MCP tools.
+
+**To list on registries:**
+- **Smithery:** Submit the repo URL at smithery.ai/submit (config in `smithery.yaml`)
+- **Composio:** Submit at composio.dev
+- **Glama:** Submit at glama.ai/mcp/servers
+
+Once listed, any agent querying these registries for "receipt", "expense", "accounting", or "OCR" will find this tool.
+
+### 4. HTTP Discovery Endpoint
+
+For agents that speak HTTP but not MCP protocol:
+
+```bash
+curl https://your-server.com/mcp
+```
+
+Returns a JSON array with all 8 tools, full JSON schemas, examples, and constraints. This is the fallback for custom agent frameworks.
+
+### 5. Framework Integrations
+
+Ready-to-use examples in the `examples/` directory:
+
+| Framework | File | What it does |
+|---|---|---|
+| **LangGraph** | `examples/langgraph_agent.py` | LangChain tools for StateGraph |
+| **CrewAI** | `examples/crewai_tool.py` | BaseTool subclasses |
+| **Raw Python** | `examples/quick_start.py` | 10-line end-to-end example |
+
+The `/integrations` endpoint also returns copy-paste snippets for LangGraph, CrewAI, AutoGen, and raw Python.
+
+### Discovery Summary
+
+```
+                    Agent needs receipt parsing
+                              |
+              ┌───────────────┼───────────────┐
+              v               v               v
+      MCP Registry      Domain Probe     Developer Config
+    (Smithery, etc.)  (/.well-known/)   (claude_desktop_config)
+              |               |               |
+              v               v               v
+         smithery.yaml    mcp.json       mcp_server.py
+              |               |               |
+              └───────┬───────┘               |
+                      v                       v
+               HTTP API (/mcp)         MCP stdio protocol
+              (tool catalogue)        (JSON-RPC over stdio)
+                      |                       |
+                      v                       v
+               POST /tools/*           Direct tool calls
+            (FastAPI endpoints)     (via MCP SDK transport)
+```
 
 See [MARKETING.md](MARKETING.md) for the full go-to-market strategy.
 
@@ -596,6 +696,7 @@ The server starts at `http://localhost:8000`.
 
 ```
 ├── app.py                 # FastAPI application, routes, auth, credit middleware
+├── mcp_server.py          # Official MCP protocol server (stdio/SSE transport)
 ├── models.py              # Pydantic request/response schemas
 ├── db.py                  # SQLite helpers (connection pool, WAL, API key cache)
 ├── tools.py               # Core tool logic + MCP descriptor generator
@@ -604,6 +705,12 @@ The server starts at `http://localhost:8000`.
 ├── tasks.py               # Celery async task definitions
 ├── webhooks.py            # Async webhook dispatch (fire-and-forget)
 ├── test_all.py            # 126-test end-to-end test suite
+├── smithery.yaml          # Smithery.ai MCP registry configuration
+├── mcp_config_example.json # Claude Desktop / Cursor config example
+├── examples/
+│   ├── quick_start.py     # 10-line end-to-end example
+│   ├── langgraph_agent.py # LangGraph tool integration
+│   └── crewai_tool.py     # CrewAI BaseTool integration
 ├── requirements.txt       # Python dependencies
 ├── CREDENTIALS_NEEDED.md  # All required API keys and setup instructions
 ├── MARKETING.md           # Go-to-market strategy for AI agent distribution

@@ -138,6 +138,48 @@ async def mcp_tools():
     return JSONResponse(content=tools.get_mcp_tools())
 
 
+# ── Well-known MCP discovery (domain-level) ──────────────────────────
+
+@app.get("/.well-known/mcp.json", tags=["MCP"])
+async def well_known_mcp():
+    """Standard MCP discovery endpoint. Agents hitting any domain can check
+    /.well-known/mcp.json to find available MCP servers."""
+    return JSONResponse(content={
+        "mcp_version": "1.0",
+        "server": {
+            "name": "Receipt Accounting Entry",
+            "description": (
+                "Convert receipt images and PDFs into structured, accounting-ready JSON. "
+                "8 tools: upload, process, extract, categorize, GL account suggestion. "
+                "Supports 300+ crypto payments. 50 free credits on signup."
+            ),
+            "version": "3.1.0",
+            "transport": [
+                {
+                    "type": "http",
+                    "url": "/mcp",
+                    "description": "HTTP JSON tool catalogue",
+                },
+                {
+                    "type": "stdio",
+                    "command": "python",
+                    "args": ["mcp_server.py"],
+                    "description": "MCP stdio transport (for Claude Desktop, Cursor, etc.)",
+                },
+            ],
+            "tools_count": 8,
+            "registration": {
+                "url": "/register_agent",
+                "method": "POST",
+                "free_credits": 50,
+                "description": "Self-service. Returns API key instantly.",
+            },
+            "documentation": "/docs",
+            "source": "https://github.com/TiagoX9/Receipt-Accounting-Entry-MCP-Server",
+        },
+    })
+
+
 # ── Agent registration ──────────────────────────────────────────────────
 
 @app.post(
