@@ -50,6 +50,7 @@ A production-ready, agent-native MCP server that converts receipt images and PDF
   - [Environment Variables](#environment-variables)
 - [File Structure](#file-structure)
 - [Marketing Strategy](#marketing-strategy)
+- [Before Going Live](#before-going-live)
 - [Launch Checklist](#launch-checklist)
 - [License](#license)
 
@@ -713,9 +714,10 @@ The server starts at `http://localhost:8000`.
 │   ├── langgraph_agent.py # LangGraph tool integration
 │   └── crewai_tool.py     # CrewAI BaseTool integration
 ├── requirements.txt       # Python dependencies
-├── CREDENTIALS_NEEDED.md  # All required API keys and setup instructions
+├── BEFORE_GOING_LIVE.md   # Complete setup guide: keys, deploy, verify (START HERE)
+├── LAUNCH_CHECKLIST.md    # Post-deploy: registries, social, marketing
 ├── MARKETING.md           # Go-to-market strategy for AI agent distribution
-├── LAUNCH_CHECKLIST.md    # Step-by-step launch instructions (don't skip this)
+├── CREDENTIALS_NEEDED.md  # API key reference
 ├── .gitignore
 └── README.md
 ```
@@ -733,6 +735,23 @@ See [MARKETING.md](MARKETING.md) for the complete go-to-market playbook covering
 - **Metrics** -- Registration, activation, revenue, and retention targets
 - **Competitive moat** -- Why this is defensible long-term
 - **Partnerships** -- Anthropic, LangChain, CrewAI, Composio
+
+---
+
+## Before Going Live
+
+See **[BEFORE_GOING_LIVE.md](BEFORE_GOING_LIVE.md)** for the complete step-by-step setup guide. Covers:
+
+1. **Get API keys** -- Anthropic, Stripe, NOWPayments (with exact URLs and what to click)
+2. **Set up billing** -- Create Stripe products, configure crypto IPN
+3. **Create .env file** -- Copy-paste template with every variable explained
+4. **Test locally** -- Run tests, smoke test commands
+5. **Deploy** -- Step-by-step for Railway, Render, and Fly.io
+6. **Configure webhooks** -- Set callback URLs after deployment
+7. **Verify** -- 6 curl commands to confirm everything works
+8. **Cost breakdown** -- What each service costs you vs. what you charge
+
+Includes a "Quick Decision Guide" at the bottom for different launch strategies (minimal, Stripe-only, full setup, cheapest start).
 
 ---
 
