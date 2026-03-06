@@ -741,16 +741,34 @@ async def list_receipts_endpoint(
 )
 async def upload_and_process_endpoint(
     mime_type: Annotated[str, Form()],
-    _key: str = CreditAuth,
+    _key: str = Auth,  # Auth only (no credit deduction yet) — idempotency checked first
     file: UploadFile | None = File(None),
     url: str | None = Form(None),
     idempotency_key: str | None = Form(None),
 ):
     """Upload + process a receipt in one call. Costs 1 credit. Supports idempotency."""
+    # Check idempotency BEFORE deducting credits
     if idempotency_key:
         cached = db.get_idempotent_result(idempotency_key, _key)
         if cached is not None:
             return JSONResponse(content=cached)
+
+    # Now deduct credit (only for fresh requests)
+    try:
+        billing.check_and_deduct(_key, cost=1)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "error": str(e),
+                "buy_credits_url": "/billing/buy_credits",
+                "buy_credits_crypto_url": "/billing/buy_credits_crypto",
+                "subscribe_url": "/billing/subscribe",
+                "pricing_url": "/pricing",
+                "cheapest_option": {"credits": 100, "price_usd": 5.00},
+            },
+        )
+    await check_low_balance(_key)
 
     file_bytes: bytes | None = None
     if file is not None:
