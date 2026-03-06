@@ -186,6 +186,8 @@ def run_tests():
     detail = r.json()["detail"]
     test("402 includes buy_credits_url", "buy_credits" in str(detail))
     test("402 includes subscribe_url", "subscribe" in str(detail))
+    test("402 includes pricing_url", "pricing" in str(detail))
+    test("402 includes cheapest_option", "cheapest_option" in str(detail))
 
     # suggest_gl_account also requires credits
     r = client.post("/tools/suggest_gl_account", headers=broke_headers,
@@ -323,7 +325,44 @@ def run_tests():
     test("upload_and_process endpoint exists",
          r.status_code in (200, 500), f"status={r.status_code}")
 
-    # ── 17. Request ID middleware ─────────────────────────────────────
+    # ── 17. Pricing endpoint (public, no auth) ──────────────────────
+    print("\n--- PRICING ---")
+    r = client.get("/pricing")
+    test("GET /pricing returns 200", r.status_code == 200)
+    pricing = r.json()
+    test("pricing has credit_packs", "credit_packs" in pricing)
+    test("pricing has subscriptions", "subscriptions" in pricing)
+    test("pricing has tool_costs", "tool_costs" in pricing)
+    test("pricing has tax_note", "tax_note" in pricing)
+    test("pricing has 5 credit packs", len(pricing["credit_packs"]) == 5)
+    test("pricing has 3 subscription tiers", len(pricing["subscriptions"]) == 3)
+    test("process_receipt costs 1 credit",
+         pricing["tool_costs"]["process_receipt"]["credits"] == 1)
+    test("check_balance is free",
+         pricing["tool_costs"]["check_balance"]["credits"] == 0)
+
+    # ── 18. Legal endpoints ────────────────────────────────────────────
+    print("\n--- LEGAL ---")
+    r = client.get("/legal/terms")
+    test("GET /legal/terms returns 200", r.status_code == 200)
+    terms = r.json()
+    test("terms has service name", "service" in terms)
+    test("terms has terms content", "terms" in terms)
+    test("terms has contact", "contact" in terms)
+    test("terms covers billing", "3_credits_and_billing" in terms["terms"])
+    test("terms covers data handling", "6_data_handling" in terms["terms"])
+    test("terms covers liability", "9_liability" in terms["terms"])
+
+    r = client.get("/legal/privacy")
+    test("GET /legal/privacy returns 200", r.status_code == 200)
+    privacy = r.json()
+    test("privacy has policy content", "policy" in privacy)
+    test("privacy covers data collected", "1_data_collected" in privacy["policy"])
+    test("privacy covers third parties", "3_third_party_sharing" in privacy["policy"])
+    test("privacy covers data retention", "4_data_retention" in privacy["policy"])
+    test("privacy covers your rights", "5_your_rights" in privacy["policy"])
+
+    # ── 20. Request ID middleware ─────────────────────────────────────
     print("\n--- REQUEST ID MIDDLEWARE ---")
     r = client.get("/health")
     test("Response has X-Request-ID header", "x-request-id" in r.headers)
@@ -332,7 +371,7 @@ def run_tests():
     test("Custom request ID echoed back",
          r.headers.get("x-request-id") == "test-req-123")
 
-    # ── 18. OpenAPI / Swagger docs ────────────────────────────────────
+    # ── 21. OpenAPI / Swagger docs ────────────────────────────────────
     print("\n--- OPENAPI DOCS ---")
     r = client.get("/docs")
     test("GET /docs returns 200", r.status_code == 200)
@@ -341,7 +380,7 @@ def run_tests():
     test("GET /openapi.json returns 200", r.status_code == 200)
     spec = r.json()
     paths = list(spec.get("paths", {}).keys())
-    test(f"OpenAPI has {len(paths)} paths", len(paths) >= 17, paths)
+    test(f"OpenAPI has {len(paths)} paths", len(paths) >= 25, paths)
 
     # ── Summary ─────────────────────────────────────────────────────
     print(f"\n{'='*60}")

@@ -89,7 +89,10 @@ async def require_credits(x_api_key: Annotated[str, Header()]) -> str:
             detail={
                 "error": str(e),
                 "buy_credits_url": "/billing/buy_credits",
+                "buy_credits_crypto_url": "/billing/buy_credits_crypto",
                 "subscribe_url": "/billing/subscribe",
+                "pricing_url": "/pricing",
+                "cheapest_option": {"credits": 100, "price_usd": 5.00},
             },
         )
     await check_low_balance(key)
@@ -177,6 +180,156 @@ async def well_known_mcp():
             "documentation": "/docs",
             "source": "https://github.com/TiagoX9/Receipt-Accounting-Entry-MCP-Server",
         },
+    })
+
+
+# ── Public pricing (no auth) ────────────────────────────────────────────
+
+@app.get("/pricing", tags=["Public"])
+async def pricing():
+    """Public pricing page. No auth required. Agents and humans can see all prices."""
+    return JSONResponse(content={
+        "currency": "USD",
+        "credit_packs": [
+            {"credits": 100, "price": 5.00, "per_credit": 0.050},
+            {"credits": 500, "price": 20.00, "per_credit": 0.040},
+            {"credits": 1000, "price": 40.00, "per_credit": 0.040},
+            {"credits": 5000, "price": 150.00, "per_credit": 0.030},
+            {"credits": 10000, "price": 300.00, "per_credit": 0.030},
+        ],
+        "subscriptions": [
+            {"plan": "free", "price": 0, "credits_per_month": 50, "note": "One-time on signup"},
+            {"plan": "basic", "price": 15.00, "credits_per_month": 200},
+            {"plan": "pro", "price": 99.00, "credits_per_month": 2000},
+        ],
+        "tool_costs": {
+            "upload_receipt": {"credits": 0, "note": "free"},
+            "process_receipt": {"credits": 1},
+            "upload_and_process": {"credits": 1},
+            "get_receipt_markdown": {"credits": 0, "note": "free"},
+            "suggest_gl_account": {"credits": 1},
+            "check_balance": {"credits": 0, "note": "free"},
+            "list_receipts": {"credits": 0, "note": "free"},
+        },
+        "tax_note": "Prices exclude applicable taxes (VAT/sales tax). Tax is calculated at checkout based on your location.",
+        "buy_credits": "/billing/buy_credits",
+        "buy_credits_crypto": "/billing/buy_credits_crypto",
+        "subscribe": "/billing/subscribe",
+    })
+
+
+# ── Legal pages ──────────────────────────────────────────────────────────
+
+@app.get("/legal/terms", tags=["Legal"])
+async def terms_of_service():
+    """Terms of Service for the Receipt MCP Server API."""
+    terms_url = os.environ.get("TERMS_URL", "")
+    return JSONResponse(content={
+        "service": "Receipt Accounting Entry MCP Server",
+        "effective_date": "2026-03-06",
+        "terms": {
+            "1_acceptance": (
+                "By registering an agent or using this API, you agree to these terms. "
+                "If you do not agree, do not use the service."
+            ),
+            "2_service_description": (
+                "We provide an API that converts receipt images and PDFs into structured "
+                "accounting-ready JSON using AI vision. The service is sold on a credit-based model."
+            ),
+            "3_credits_and_billing": (
+                "Credits are non-refundable digital units used to pay for API calls. "
+                "1 credit = 1 receipt processing call. Credits do not expire. "
+                "Prices are in USD and exclude applicable taxes. "
+                "Tax (VAT/sales tax) is calculated at checkout based on your billing location."
+            ),
+            "4_free_tier": (
+                "New agents receive 50 free credits on registration. "
+                "Free credits are subject to the same terms as purchased credits."
+            ),
+            "5_api_usage": (
+                "You may use the API for lawful business purposes only. "
+                "You must not abuse the service, exceed rate limits, or attempt to circumvent billing. "
+                "We reserve the right to suspend accounts that violate these terms."
+            ),
+            "6_data_handling": (
+                "Uploaded receipt images are stored temporarily for processing and may be "
+                "deleted after 30 days. We do not sell or share your receipt data with third parties. "
+                "Receipt data is sent to Anthropic's API for AI processing and is subject to "
+                "Anthropic's data usage policies."
+            ),
+            "7_accuracy_disclaimer": (
+                "AI-extracted receipt data is provided as-is. While we aim for high accuracy, "
+                "you should verify extracted data before using it for accounting or tax purposes. "
+                "We are not liable for errors in AI-generated output."
+            ),
+            "8_payment_processing": (
+                "Card payments are processed by Stripe. Cryptocurrency payments are processed "
+                "by NOWPayments. We do not store your payment card details. "
+                "All transactions are final. Refunds are handled on a case-by-case basis."
+            ),
+            "9_liability": (
+                "The service is provided 'as is' without warranties. We are not liable for "
+                "indirect, incidental, or consequential damages arising from use of the service."
+            ),
+            "10_changes": (
+                "We may update these terms at any time. Continued use after changes "
+                "constitutes acceptance of the updated terms."
+            ),
+        },
+        "contact": os.environ.get("SUPPORT_EMAIL", "support@example.com"),
+        "full_terms_url": terms_url or None,
+    })
+
+
+@app.get("/legal/privacy", tags=["Legal"])
+async def privacy_policy():
+    """Privacy Policy for the Receipt MCP Server API."""
+    privacy_url = os.environ.get("PRIVACY_URL", "")
+    return JSONResponse(content={
+        "service": "Receipt Accounting Entry MCP Server",
+        "effective_date": "2026-03-06",
+        "policy": {
+            "1_data_collected": {
+                "agent_registration": ["agent_name", "org_id (optional)"],
+                "receipt_processing": ["receipt images/PDFs (temporarily stored)", "extracted text and amounts"],
+                "billing": ["Stripe customer ID", "transaction history", "credit balance"],
+                "technical": ["API key", "IP address (in server logs)", "request timestamps"],
+            },
+            "2_how_we_use_data": [
+                "Process receipt images using Anthropic's Claude AI API",
+                "Manage your credit balance and billing",
+                "Send webhook notifications you subscribed to",
+                "Improve service reliability and performance",
+            ],
+            "3_third_party_sharing": {
+                "anthropic": "Receipt images are sent to Anthropic's API for AI processing",
+                "stripe": "Billing data is shared with Stripe for payment processing",
+                "nowpayments": "Crypto payment data is shared with NOWPayments for payment processing",
+                "no_other_sharing": "We do not sell or share your data with any other third parties",
+            },
+            "4_data_retention": {
+                "receipt_images": "Stored for up to 30 days, then deleted",
+                "extracted_data": "Stored indefinitely unless you request deletion",
+                "billing_records": "Stored for 7 years (tax compliance)",
+                "server_logs": "Retained for 90 days",
+            },
+            "5_your_rights": [
+                "Request a copy of your data",
+                "Request deletion of your data",
+                "Request correction of inaccurate data",
+                "EU/EEA residents have additional rights under GDPR",
+            ],
+            "6_security": (
+                "API keys are generated using cryptographically secure random tokens. "
+                "All communication is encrypted via HTTPS. "
+                "We do not store payment card details (handled by Stripe)."
+            ),
+            "7_cookies": "This API does not use cookies. There is no web frontend.",
+            "8_children": "This service is not intended for use by anyone under 18.",
+            "9_changes": "We may update this policy. Check this endpoint for the latest version.",
+        },
+        "contact": os.environ.get("SUPPORT_EMAIL", "support@example.com"),
+        "full_privacy_url": privacy_url or None,
     })
 
 

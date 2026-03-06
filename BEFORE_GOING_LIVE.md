@@ -18,7 +18,9 @@ Everything you need to do before this server is production-ready, in order. Each
 - [Step 8 alt: Deploy to Fly.io](#step-8-alt-deploy-to-flyio)
 - [Step 9: Configure Webhooks with Your Live URL](#step-9-configure-webhooks-with-your-live-url)
 - [Step 10: Verify Everything Works](#step-10-verify-everything-works)
-- [Step 11: Make It Discoverable](#step-11-make-it-discoverable)
+- [Step 11: Set Up Taxes & Invoices](#step-11-set-up-taxes--invoices)
+- [Step 12: Legal Compliance](#step-12-legal-compliance)
+- [Step 13: Make It Discoverable](#step-13-make-it-discoverable)
 - [Pricing & Profitability Analysis](#pricing--profitability-analysis)
 - [What Each Service Costs You (Summary)](#what-each-service-costs-you-summary)
 - [Your Complete .env Reference](#your-complete-env-reference)
@@ -410,7 +412,114 @@ If all 6 pass, you're live.
 
 ---
 
-## Step 11: Make It Discoverable
+## Step 11: Set Up Taxes & Invoices
+
+You need to handle taxes properly to be legally compliant. The server supports Stripe Tax for automatic tax calculation and invoice generation.
+
+### 11a. Enable Stripe Tax (recommended)
+
+Stripe Tax automatically calculates and collects the correct VAT, sales tax, or GST based on the customer's location. It costs an additional 0.5% per transaction.
+
+1. Go to https://dashboard.stripe.com/settings/tax
+2. Click "Get started" or "Enable Stripe Tax"
+3. Set your **business address** (this determines your tax registration)
+4. Add your **tax registrations** for the countries/states you need to collect tax in:
+   - **EU:** If you're EU-based, register for VAT in your country. For selling to other EU countries, register for One-Stop Shop (OSS) to avoid registering in every EU country.
+   - **US:** Register in states where you have nexus (physical presence or economic nexus)
+   - **UK:** Register for VAT if selling to UK customers
+5. Once enabled, set these env vars on your server:
+   ```
+   STRIPE_TAX_ENABLED=true
+   STRIPE_COLLECT_ADDRESS=true
+   ```
+
+### 11b. How taxes work in your server
+
+When `STRIPE_TAX_ENABLED=true`:
+- Stripe Checkout automatically adds the correct tax on top of your prices
+- Customers see the tax amount before paying
+- Tax is collected and reported in your Stripe Dashboard
+- Invoices include the tax breakdown automatically
+
+When `STRIPE_COLLECT_ADDRESS=true`:
+- Checkout collects the customer's billing address (needed for tax calculation)
+- Business customers can enter their VAT/tax ID for reverse-charge (B2B)
+- Tax ID is validated automatically by Stripe
+
+### 11c. Invoice generation
+
+The server now automatically generates Stripe invoices for every purchase:
+- **Credit pack purchases:** Invoice created via `invoice_creation` on checkout
+- **Subscriptions:** Stripe generates invoices automatically for every billing cycle
+- **Crypto payments:** No automatic invoice (NOWPayments handles the receipt)
+
+Customers can access their invoices from the Stripe-hosted invoice page (linked in the Stripe receipt email).
+
+### 11d. What you need to register for
+
+This depends on where you are based:
+
+| Your Location | What to Register | Where |
+|---|---|---|
+| **EU country** | VAT in your country + OSS for cross-border EU sales | Your national tax authority + OSS portal |
+| **US** | Sales tax in states with nexus | Each state's department of revenue |
+| **UK** | VAT (if revenue > £90,000/yr) | HMRC |
+| **Other** | Check local digital services tax rules | Your national tax authority |
+
+**Important:** Even if you're small, you may need to register for VAT/sales tax when selling digital services. Stripe Tax handles the calculation and collection, but **you** are responsible for registering and filing. Consider consulting an accountant for your specific situation.
+
+### 11e. For crypto payments
+
+NOWPayments does not handle tax collection. For crypto sales:
+- You receive the full amount minus the 0.5% NOWPayments fee
+- **You are responsible for accounting for tax on crypto sales yourself**
+- Keep records of all crypto payments (stored in your `crypto_payments` DB table)
+- Report crypto income on your tax returns
+
+---
+
+## Step 12: Legal Compliance
+
+Your server now has built-in legal endpoints. Review and customize them.
+
+### 12a. Review Terms of Service
+
+The server has a `/legal/terms` endpoint with default terms. Before going live:
+
+1. Read the terms at `https://YOUR-DOMAIN.com/legal/terms`
+2. If you need to customize, set `TERMS_URL` env var to point to your own hosted terms page
+3. Key things to verify:
+   - Refund policy matches your intentions
+   - Data retention period is acceptable
+   - Liability limitations are appropriate for your jurisdiction
+
+### 12b. Review Privacy Policy
+
+The server has a `/legal/privacy` endpoint with a default policy. Before going live:
+
+1. Read the policy at `https://YOUR-DOMAIN.com/legal/privacy`
+2. If you need to customize, set `PRIVACY_URL` env var to your own hosted privacy page
+3. **GDPR (EU):** If you have EU customers, you must:
+   - Have a lawful basis for processing (legitimate interest or contract)
+   - Allow data subject access requests
+   - Allow data deletion requests
+   - Mention Anthropic as a data processor (receipt images are sent to their API)
+4. **CCPA (California):** If you have California customers, you must disclose data collection and allow opt-out
+
+### 12c. Set your contact email
+
+Set the `SUPPORT_EMAIL` env var so the legal pages show your real contact:
+```
+SUPPORT_EMAIL=your-email@example.com
+```
+
+### 12d. Consider a proper legal review
+
+The built-in terms and privacy policy are reasonable defaults, but they are **not legal advice**. Before accepting real money, consider having a lawyer review them. This is especially important if you're in the EU (GDPR) or handling significant volume.
+
+---
+
+## Step 13: Make It Discoverable
 
 Now go through [LAUNCH_CHECKLIST.md](LAUNCH_CHECKLIST.md) to get listed on MCP registries, add GitHub topics, and spread the word.
 
@@ -540,6 +649,23 @@ CRYPTO_IPN_CALLBACK_URL=https://YOUR-DOMAIN.com/billing/crypto_webhook
 # Skip if you don't need /tools/process_receipt_async
 # Free option: https://upstash.com
 REDIS_URL=
+
+# ============================================
+# TAX & INVOICES (Step 11)
+# ============================================
+# Enable Stripe Tax for automatic VAT/sales tax (requires Stripe Tax setup)
+STRIPE_TAX_ENABLED=true
+# Collect billing address at checkout (needed for tax calculation)
+STRIPE_COLLECT_ADDRESS=true
+
+# ============================================
+# LEGAL (Step 12)
+# ============================================
+# Contact email shown on /legal/terms and /legal/privacy
+SUPPORT_EMAIL=your-email@example.com
+# Optional: link to your own hosted terms/privacy pages
+TERMS_URL=
+PRIVACY_URL=
 
 # LEGACY -- optional, agents can self-register instead
 API_KEYS=

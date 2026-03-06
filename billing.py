@@ -49,10 +49,11 @@ def create_checkout_session(api_key: str, credits: int) -> dict[str, Any]:
     if not stripe.api_key:
         raise ValueError("Stripe is not configured. Set STRIPE_SECRET_KEY env var.")
 
-    session = stripe.checkout.Session.create(
-        mode="payment",
-        customer=agent["stripe_customer_id"] or None,
-        line_items=[{
+    # Build session params
+    session_params: dict[str, Any] = {
+        "mode": "payment",
+        "customer": agent["stripe_customer_id"] or None,
+        "line_items": [{
             "price_data": {
                 "currency": "usd",
                 "unit_amount": price_cents,
@@ -63,14 +64,27 @@ def create_checkout_session(api_key: str, credits: int) -> dict[str, Any]:
             },
             "quantity": 1,
         }],
-        metadata={"api_key": api_key, "credits": str(credits)},
-        success_url=os.environ.get(
+        "metadata": {"api_key": api_key, "credits": str(credits)},
+        # Generate an invoice for every one-time purchase (for legal/tax records)
+        "invoice_creation": {"enabled": True},
+        "success_url": os.environ.get(
             "STRIPE_SUCCESS_URL", "https://example.com/success"
         ),
-        cancel_url=os.environ.get(
+        "cancel_url": os.environ.get(
             "STRIPE_CANCEL_URL", "https://example.com/cancel"
         ),
-    )
+    }
+
+    # Enable automatic tax calculation if configured in Stripe Dashboard
+    if os.environ.get("STRIPE_TAX_ENABLED", "").lower() in ("1", "true", "yes"):
+        session_params["automatic_tax"] = {"enabled": True}
+
+    # Collect billing address for tax calculation
+    if os.environ.get("STRIPE_COLLECT_ADDRESS", "").lower() in ("1", "true", "yes"):
+        session_params["billing_address_collection"] = "required"
+        session_params["tax_id_collection"] = {"enabled": True}
+
+    session = stripe.checkout.Session.create(**session_params)
     return {"checkout_url": session.url, "session_id": session.id}
 
 
@@ -94,22 +108,34 @@ def create_subscription_session(api_key: str, plan: str) -> dict[str, Any]:
     if not stripe.api_key:
         raise ValueError("Stripe is not configured. Set STRIPE_SECRET_KEY env var.")
 
-    session = stripe.checkout.Session.create(
-        mode="subscription",
-        customer=agent["stripe_customer_id"] or None,
-        line_items=[{"price": plan_info["stripe_price_id"], "quantity": 1}],
-        metadata={
+    # Build session params
+    session_params: dict[str, Any] = {
+        "mode": "subscription",
+        "customer": agent["stripe_customer_id"] or None,
+        "line_items": [{"price": plan_info["stripe_price_id"], "quantity": 1}],
+        "metadata": {
             "api_key": api_key,
             "plan": plan,
             "credits_per_month": str(plan_info["credits_per_month"]),
         },
-        success_url=os.environ.get(
+        "success_url": os.environ.get(
             "STRIPE_SUCCESS_URL", "https://example.com/success"
         ),
-        cancel_url=os.environ.get(
+        "cancel_url": os.environ.get(
             "STRIPE_CANCEL_URL", "https://example.com/cancel"
         ),
-    )
+    }
+
+    # Enable automatic tax calculation if configured in Stripe Dashboard
+    if os.environ.get("STRIPE_TAX_ENABLED", "").lower() in ("1", "true", "yes"):
+        session_params["automatic_tax"] = {"enabled": True}
+
+    # Collect billing address and tax ID for invoices
+    if os.environ.get("STRIPE_COLLECT_ADDRESS", "").lower() in ("1", "true", "yes"):
+        session_params["billing_address_collection"] = "required"
+        session_params["tax_id_collection"] = {"enabled": True}
+
+    session = stripe.checkout.Session.create(**session_params)
     return {"checkout_url": session.url, "session_id": session.id}
 
 
