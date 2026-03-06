@@ -39,7 +39,7 @@ def _get_client() -> anthropic.AsyncAnthropic:
     return _client
 
 
-VISION_MODEL = "claude-sonnet-4-6-20250514"
+VISION_MODEL = "claude-haiku-4-5-20251001"
 
 EXTRACTION_SYSTEM = (
     "You are a world-class receipt parser. Given an image or PDF of a receipt, "
@@ -346,7 +346,7 @@ def _build_mcp_tools() -> list[dict[str, Any]]:
         {
             "name": "process_receipt",
             "description": (
-                "Process an uploaded receipt using Claude Sonnet 4.6 vision to extract structured "
+                "Process an uploaded receipt using AI vision to extract structured "
                 "expense data. Returns merchant, date, total, currency, line items, taxes, "
                 "category, confidence scores, and reasoning. This is the core extraction tool. "
                 "Costs 1 credit per call. Use check_balance first to verify sufficient credits."

@@ -199,7 +199,7 @@ github.com/TiagoX9/Receipt-Accounting-Entry-MCP-Server
 - No human dashboard. API-only. Agents are the users.
 
 4/ Tech stack:
-- FastAPI + Claude Sonnet 4.6 Vision
+- FastAPI + Claude Haiku 4.5 Vision
 - SQLite (WAL mode, connection pooling)
 - Atomic credit deduction (no race conditions)
 - Async webhooks (fire-and-forget)

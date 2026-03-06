@@ -19,7 +19,8 @@ Everything you need to do before this server is production-ready, in order. Each
 - [Step 9: Configure Webhooks with Your Live URL](#step-9-configure-webhooks-with-your-live-url)
 - [Step 10: Verify Everything Works](#step-10-verify-everything-works)
 - [Step 11: Make It Discoverable](#step-11-make-it-discoverable)
-- [What Each Service Costs You](#what-each-service-costs-you)
+- [Pricing & Profitability Analysis](#pricing--profitability-analysis)
+- [What Each Service Costs You (Summary)](#what-each-service-costs-you-summary)
 - [Your Complete .env Reference](#your-complete-env-reference)
 
 ---
@@ -421,17 +422,82 @@ The short version:
 
 ---
 
-## What Each Service Costs You
+## Pricing & Profitability Analysis
+
+### Your API Cost Per Receipt
+
+The server uses **Claude Haiku 4.5** (`claude-haiku-4-5-20251001`) for receipt extraction. Haiku is 3x cheaper than Sonnet and more than sufficient for OCR/receipt parsing.
+
+**Anthropic API pricing (Haiku 4.5):** $1.00/MTok input, $5.00/MTok output
+
+| Component | Tokens | Cost |
+|---|---|---|
+| Image input (receipt photo) | ~2,500 | $0.0025 |
+| Text input (prompt + schema) | ~1,500 | $0.0015 |
+| Output (JSON response) | ~500 | $0.0025 |
+| **Total per `process_receipt`** | **~4,500** | **~$0.007** |
+| **Total per `suggest_gl_account`** | **~1,000** | **~$0.002** |
+
+For comparison, Sonnet 4.6 would cost ~$0.02/receipt (3x more). If you ever need higher accuracy for complex receipts, you can change `VISION_MODEL` in `tools.py` to `claude-sonnet-4-6-20250514`.
+
+### Your Credit Pricing (what you charge users)
+
+| Pack | Price | Per Credit | Your Cost | **Your Margin** |
+|---|---|---|---|---|
+| 100 credits | $5.00 | $0.050 | $0.007 | **86%** |
+| 500 credits | $20.00 | $0.040 | $0.007 | **82%** |
+| 1,000 credits | $40.00 | $0.040 | $0.007 | **82%** |
+| 5,000 credits | $150.00 | $0.030 | $0.007 | **77%** |
+| 10,000 credits | $300.00 | $0.030 | $0.007 | **77%** |
+
+| Subscription | Price/mo | Credits/mo | Per Credit | **Your Margin** |
+|---|---|---|---|---|
+| Free | $0 | 50 (one-time) | -- | Marketing cost |
+| Basic | $15/mo | 200 | $0.075 | **91%** |
+| Pro | $99/mo | 2,000 | $0.050 | **86%** |
+
+### Payment processor fees
+
+| Provider | Fee | Impact on $40 sale | Net revenue |
+|---|---|---|---|
+| **Stripe** | 2.9% + $0.30 | -$1.46 | $38.54 |
+| **NOWPayments** | 0.5% | -$0.20 | $39.80 |
+
+### Break-even Analysis
+
+| Scenario | Monthly Fixed Cost | Receipts to Break Even |
+|---|---|---|
+| Render (free tier) | $0 | 0 (profit from credit 1) |
+| Railway (~$5/mo) | $5 | ~170 receipts at $0.03/credit |
+| Railway (~$20/mo) | $20 | ~690 receipts at $0.03/credit |
+
+**Bottom line:** At the cheapest credit price ($0.03), you earn ~$0.023 profit per receipt. At the Basic plan rate ($0.075), you earn ~$0.068 per receipt. You need very few paying users to cover hosting costs.
+
+### Switching Models
+
+To change the AI model, edit `VISION_MODEL` in `tools.py`:
+
+```python
+# Most profitable (recommended)
+VISION_MODEL = "claude-haiku-4-5-20251001"    # ~$0.007/receipt
+
+# Higher accuracy for complex receipts
+VISION_MODEL = "claude-sonnet-4-6-20250514"   # ~$0.020/receipt
+```
+
+---
+
+## What Each Service Costs You (Summary)
 
 | Service | What You Pay | What You Charge Users | Your Margin |
 |---|---|---|---|
-| **Anthropic** | ~$0.01-0.05/receipt | 1 credit ($0.03-0.05) | ~0-60% |
+| **Anthropic (Haiku 4.5)** | ~$0.007/receipt | 1 credit ($0.03-0.075) | **77-91%** |
 | **Stripe** | 2.9% + $0.30 per transaction | Credit packs ($5-$300) | ~90-95% |
 | **NOWPayments** | 0.5% per crypto transaction | Same credit packs | ~99% |
 | **Railway** | ~$5-20/mo depending on usage | Covered by credit sales | -- |
 | **Upstash Redis** | Free (10K commands/day) | -- | -- |
 
-**Break-even estimate:** ~50-100 paid receipts/month covers a basic Railway deployment.
+**Break-even estimate:** Essentially immediate on Render free tier. ~170 paid receipts/month covers Railway.
 
 ---
 

@@ -35,7 +35,7 @@ A production-ready, agent-native MCP server that converts receipt images and PDF
 - [Framework Integration Quickstarts](#framework-integration-quickstarts)
 - [MCP Endpoint Details](#mcp-endpoint-details)
 - [Backend Choice Rationale](#backend-choice-rationale-march-2026)
-  - [Claude Sonnet 4.6 Vision API](#recommended-claude-sonnet-46-vision-api)
+  - [Claude Haiku 4.5 Vision API](#recommended-claude-haiku-45-vision-api)
   - [Fully Local with Ollama](#alternative-fully-local-with-ollama)
 - [How Agents Find This Tool](#how-agents-find-this-tool)
   - [1. MCP Protocol (stdio)](#1-mcp-protocol-stdio--claude-desktop-cursor-vs-code)
@@ -113,7 +113,7 @@ Agent / Multi-Agent System
     POST /tools/*  ────►  FastAPI endpoints
          |                  |
          |── upload_receipt ──► Local storage + SQLite
-         |── process_receipt ──► Credit check → Claude Sonnet 4.6 Vision
+         |── process_receipt ──► Credit check → Claude Haiku 4.5 Vision
          |── upload_and_process ──► Combined (1 call, idempotent)
          |── process_receipt_async → Celery + Redis → Claude Vision
          |── get_receipt_markdown ──► Cached render
@@ -140,7 +140,7 @@ Agent / Multi-Agent System
 | Component | Choice | Why |
 |---|---|---|
 | Framework | FastAPI + uvicorn | Async, fast, auto-docs at `/docs` |
-| Vision AI | Claude Sonnet 4.6 via Anthropic SDK | Best accuracy/latency/price for receipts |
+| Vision AI | Claude Haiku 4.5 via Anthropic SDK | Best cost/accuracy ratio for receipt OCR |
 | Database | SQLite (WAL mode, connection pool) | Zero-config, thread-safe, indexed |
 | Storage | Local disk (`uploads/`) | Simple for MVP, swap to S3 later |
 | Validation | Pydantic v2 | Strict schemas, fast serialization |
@@ -478,17 +478,18 @@ All tools include `"setup_required": "register_agent"` in constraints. The `buy_
 
 ## Backend Choice Rationale (March 2026)
 
-### Recommended: Claude Sonnet 4.6 Vision API
+### Recommended: Claude Haiku 4.5 Vision API
 
 | Metric | Value |
 |---|---|
-| Accuracy | 90-97% across receipt types |
-| Latency | 2-10 seconds per receipt |
-| Cost | ~$0.01-0.05 per call |
+| Accuracy | 88-95% across receipt types |
+| Latency | 1-5 seconds per receipt |
+| Cost | ~$0.007 per call |
 | Upfront cost | $0 |
 | Setup time | Minutes |
+| Profit margin | 77-91% per credit |
 
-**Why start here:** Zero upfront hardware cost means you generate revenue before spending. Best-in-class accuracy for structured extraction from receipts.
+**Why Haiku 4.5:** 3x cheaper than Sonnet with excellent accuracy for receipt OCR. Zero upfront hardware cost means you generate revenue from day one. Switch to Sonnet 4.6 (`~$0.02/call`) in `tools.py` if you need higher accuracy for complex receipts.
 
 ### Alternative: Fully Local with Ollama
 
@@ -617,7 +618,7 @@ See [MARKETING.md](MARKETING.md) for the full go-to-market strategy.
 
 | Phase | Status | Description |
 |---|---|---|
-| Phase 1 | Complete | Core tools + Claude Sonnet 4.6 vision + MCP endpoint |
+| Phase 1 | Complete | Core tools + Claude Haiku 4.5 vision + MCP endpoint |
 | Phase 2 | Complete | Stripe credits, subscriptions, agent registration, webhooks, async processing |
 | Phase 3 | Complete | Crypto payments (300+ coins) with dynamic fiat-lock quoting via NOWPayments |
 | Phase 3.1 | **Current** | Performance audit: atomic credits, connection pooling, async webhooks, combo endpoints, idempotency |

@@ -8,7 +8,7 @@ This document lists every secret/credential required to run the full Receipt MCP
 
 | Variable | Where to get it | Used for |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | [console.anthropic.com](https://console.anthropic.com) | Claude Sonnet 4.6 vision API for receipt extraction |
+| `ANTHROPIC_API_KEY` | [console.anthropic.com](https://console.anthropic.com) | Claude Haiku 4.5 vision API for receipt extraction |
 
 ---
 
