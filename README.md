@@ -2,7 +2,9 @@
 
 A production-ready, agent-native MCP server that converts receipt images and PDFs into structured, accounting-ready JSON. Built for the agentic era where AI agents autonomously handle expense management, accounts payable, and bookkeeping workflows.
 
-**Version 3.1.0** -- credit-based billing via Stripe + crypto payments (300+ coins via NOWPayments), self-service agent registration, webhook notifications, async processing via Celery, idempotency support, and framework quickstarts for LangGraph / CrewAI / AutoGen.
+**Version 3.2.0** -- credit-based billing via Stripe + crypto payments (300+ coins via NOWPayments), self-service agent registration, webhook notifications, async processing via Celery, idempotency support, pricing transparency, legal compliance (ToS + Privacy Policy), admin revenue dashboard, and framework quickstarts for LangGraph / CrewAI / AutoGen.
+
+**Built by [Kelnix](https://kelnix.org)** — Contact: info@kelnix.org
 
 ---
 
@@ -30,6 +32,9 @@ A production-ready, agent-native MCP server that converts receipt images and PDF
   - [Subscription Plans](#subscription-plans)
   - [How billing works](#how-billing-works)
   - [Crypto Payments](#crypto-payments)
+- [Pricing Transparency](#pricing-transparency)
+- [Legal Compliance](#legal-compliance)
+- [Admin Revenue Dashboard](#admin-revenue-dashboard)
 - [Async Processing (Celery + Redis)](#async-processing-celery--redis)
 - [Webhook Events](#webhook-events)
 - [Framework Integration Quickstarts](#framework-integration-quickstarts)
@@ -133,6 +138,11 @@ Agent / Multi-Agent System
 
     POST /subscribe_webhook ──► Low balance & processing alerts
     GET  /integrations ──► LangGraph / CrewAI / AutoGen snippets
+
+    GET  /pricing ────────►  Public pricing (packs, plans, tool costs)
+    GET  /legal/terms ────►  Terms of Service
+    GET  /legal/privacy ──►  Privacy Policy
+    GET  /admin/revenue ──►  Revenue dashboard (X-Admin-Key protected)
 ```
 
 ### Tech Stack
@@ -211,13 +221,16 @@ curl -X POST https://your-server.com/tools/process_receipt \
   -d '{"receipt_id": "a1b2c3d4e5f67890"}'
 ```
 
-If you have 0 credits, you get a `402` response:
+If you have 0 credits, you get a `402` response with actionable links:
 ```json
 {
   "detail": {
-    "error": "Insufficient credits: 0 available, 1 required. Buy more at POST /billing/buy_credits",
+    "error": "Insufficient credits: 0 available, 1 required.",
     "buy_credits_url": "/billing/buy_credits",
-    "subscribe_url": "/billing/subscribe"
+    "buy_credits_crypto_url": "/billing/buy_credits_crypto",
+    "subscribe_url": "/billing/subscribe",
+    "pricing_url": "/pricing",
+    "cheapest_option": "100 credits for $5.00 at POST /billing/buy_credits"
   }
 }
 ```
@@ -386,6 +399,72 @@ curl -X POST https://your-server.com/billing/check_payment_status \
 6. Agent can also poll `POST /billing/check_payment_status` to check manually
 
 **Supported coins:** BTC, ETH, SOL, USDC, USDT, DOGE, LTC, XMR, MATIC, AVAX, ADA, DOT, LINK, UNI, SHIB, and 280+ more.
+
+---
+
+## Pricing Transparency
+
+The `GET /pricing` endpoint is public (no auth required) and returns all pricing information agents need to make purchasing decisions:
+
+```bash
+curl https://your-server.com/pricing
+```
+
+Response includes:
+- **Credit packs** -- all available packs with prices and per-credit cost
+- **Subscription plans** -- free/basic/pro with credits per month
+- **Tool costs** -- which tools cost credits and which are free
+- **Tax note** -- information about applicable taxes
+
+Agents can also discover pricing through enriched `402` responses, which include `pricing_url`, `buy_credits_url`, `buy_credits_crypto_url`, `subscribe_url`, and `cheapest_option` fields.
+
+---
+
+## Legal Compliance
+
+Two public endpoints provide legal documentation:
+
+### Terms of Service
+
+```bash
+curl https://your-server.com/legal/terms
+```
+
+Returns a 10-section Terms of Service covering service description, billing, acceptable use, data handling, accuracy disclaimers, payment processing, liability, and modification policy.
+
+### Privacy Policy
+
+```bash
+curl https://your-server.com/legal/privacy
+```
+
+Returns a 9-section Privacy Policy covering data collected, how data is used, third-party sharing (Anthropic, Stripe, NOWPayments), data retention periods, user rights (including GDPR), security measures, and cookie policy.
+
+### Tax & Invoice Support
+
+- **Automatic invoices** -- Stripe generates invoices for every credit pack purchase
+- **Automatic tax** -- Enable `STRIPE_TAX_ENABLED=true` for Stripe Tax to auto-calculate VAT/sales tax
+- **Billing address collection** -- Enable `STRIPE_COLLECT_ADDRESS=true` to collect billing addresses and tax IDs for B2B reverse-charge
+
+---
+
+## Admin Revenue Dashboard
+
+The `GET /admin/revenue` endpoint gives the server owner a full business overview. Protected by the `X-Admin-Key` header (matched against `ADMIN_KEY` env var).
+
+```bash
+curl https://your-server.com/admin/revenue \
+  -H "X-Admin-Key: your-secret-admin-key"
+```
+
+Returns:
+- **Summary** -- total agents, agents by plan (free/basic/pro), total credits granted vs. spent vs. in circulation
+- **Revenue by source** -- breakdown of credits from Stripe packs, subscriptions, crypto payments, and free signups
+- **Crypto payment stats** -- count and USD total by payment status (waiting, confirmed, finished, etc.)
+- **Recent purchases** -- last 20 paid credit additions with agent name, credits, reason, and date
+- **Top agents** -- top 20 agents ranked by credit usage, with plan and registration date
+- **Daily volume** -- receipts processed per day for the last 30 days
+- **Cost estimate** -- approximate API costs based on $0.007/receipt (Haiku 4.5)
 
 ---
 
@@ -621,7 +700,8 @@ See [MARKETING.md](MARKETING.md) for the full go-to-market strategy.
 | Phase 1 | Complete | Core tools + Claude Haiku 4.5 vision + MCP endpoint |
 | Phase 2 | Complete | Stripe credits, subscriptions, agent registration, webhooks, async processing |
 | Phase 3 | Complete | Crypto payments (300+ coins) with dynamic fiat-lock quoting via NOWPayments |
-| Phase 3.1 | **Current** | Performance audit: atomic credits, connection pooling, async webhooks, combo endpoints, idempotency |
+| Phase 3.1 | Complete | Performance audit: atomic credits, connection pooling, async webhooks, combo endpoints, idempotency |
+| Phase 3.2 | **Current** | Pricing transparency, legal compliance (ToS + Privacy), admin revenue dashboard, invoice/tax support, Kelnix branding |
 
 ---
 
@@ -663,6 +743,16 @@ export REDIS_URL=redis://localhost:6379/0
 # Legacy API keys (optional -- agents can self-register instead)
 export API_KEYS=dev-key-change-me
 
+# Admin dashboard (optional -- protects /admin/revenue)
+export ADMIN_KEY=your-secret-admin-key
+
+# Tax & invoices (optional -- enables Stripe automatic tax + address collection)
+export STRIPE_TAX_ENABLED=true
+export STRIPE_COLLECT_ADDRESS=true
+
+# Organization contact (optional)
+export SUPPORT_EMAIL=info@kelnix.org
+
 uvicorn app:app --reload
 ```
 
@@ -676,6 +766,9 @@ The server starts at `http://localhost:8000`.
 - **MCP tools:** `http://localhost:8000/mcp`
 - **Swagger docs:** `http://localhost:8000/docs`
 - **Health check:** `http://localhost:8000/health`
+- **Pricing:** `http://localhost:8000/pricing`
+- **Terms of Service:** `http://localhost:8000/legal/terms`
+- **Privacy Policy:** `http://localhost:8000/legal/privacy`
 - **Integrations:** `http://localhost:8000/integrations`
 
 ### Environment Variables
@@ -692,6 +785,10 @@ The server starts at `http://localhost:8000`.
 | `CRYPTO_IPN_CALLBACK_URL` | No | -- | Your public URL for crypto payment callbacks |
 | `REDIS_URL` | No | `redis://localhost:6379/0` | Redis URL for Celery task queue |
 | `API_KEYS` | No | `dev-key-change-me` | Legacy comma-separated API keys |
+| `ADMIN_KEY` | No | -- | Secret key for `/admin/revenue` dashboard |
+| `STRIPE_TAX_ENABLED` | No | -- | Set to `true` to enable automatic tax calculation |
+| `STRIPE_COLLECT_ADDRESS` | No | -- | Set to `true` to require billing address + tax ID |
+| `SUPPORT_EMAIL` | No | `info@kelnix.org` | Contact email shown in legal endpoints |
 
 ---
 
@@ -707,7 +804,7 @@ The server starts at `http://localhost:8000`.
 ├── crypto_gateway.py      # NOWPayments abstraction (persistent async client)
 ├── tasks.py               # Celery async task definitions
 ├── webhooks.py            # Async webhook dispatch (fire-and-forget)
-├── test_all.py            # 126-test end-to-end test suite
+├── test_all.py            # 152-test end-to-end test suite
 ├── smithery.yaml          # Smithery.ai MCP registry configuration
 ├── mcp_config_example.json # Claude Desktop / Cursor config example
 ├── examples/
@@ -751,6 +848,9 @@ See **[BEFORE_GOING_LIVE.md](BEFORE_GOING_LIVE.md)** for the complete step-by-st
 6. **Configure webhooks** -- Set callback URLs after deployment
 7. **Verify** -- 6 curl commands to confirm everything works
 8. **Cost breakdown** -- What each service costs you vs. what you charge
+9. **Pricing & profitability** -- Per-receipt cost analysis, margin tables, break-even analysis
+10. **Set up taxes & invoices** -- Stripe Tax, invoice generation, VAT/sales tax registration
+11. **Legal compliance** -- Review Terms of Service and Privacy Policy, GDPR/CCPA checklist
 
 Includes a "Quick Decision Guide" at the bottom for different launch strategies (minimal, Stripe-only, full setup, cheapest start).
 

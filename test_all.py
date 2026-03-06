@@ -51,7 +51,7 @@ def run_tests():
     print("\n--- SYSTEM ---")
     r = client.get("/health")
     test("GET /health returns 200", r.status_code == 200)
-    test("/health has version 3.1.0", r.json().get("version") == "3.1.0", r.json())
+    test("/health has version 3.2.0", r.json().get("version") == "3.2.0", r.json())
 
     # ── 2. MCP Discovery ────────────────────────────────────────────
     print("\n--- MCP DISCOVERY ---")
@@ -371,7 +371,15 @@ def run_tests():
     test("Custom request ID echoed back",
          r.headers.get("x-request-id") == "test-req-123")
 
-    # ── 21. OpenAPI / Swagger docs ────────────────────────────────────
+    # ── 21. Admin revenue endpoint ──────────────────────────────────
+    print("\n--- ADMIN REVENUE ---")
+    r = client.get("/admin/revenue", headers={"X-Admin-Key": "wrong-key"})
+    test("Admin revenue rejects bad key", r.status_code == 403)
+
+    r = client.get("/admin/revenue", headers={"X-Admin-Key": ""})
+    test("Admin revenue rejects empty key", r.status_code == 403)
+
+    # ── 22. OpenAPI / Swagger docs ────────────────────────────────────
     print("\n--- OPENAPI DOCS ---")
     r = client.get("/docs")
     test("GET /docs returns 200", r.status_code == 200)
@@ -380,7 +388,7 @@ def run_tests():
     test("GET /openapi.json returns 200", r.status_code == 200)
     spec = r.json()
     paths = list(spec.get("paths", {}).keys())
-    test(f"OpenAPI has {len(paths)} paths", len(paths) >= 25, paths)
+    test(f"OpenAPI has {len(paths)} paths", len(paths) >= 26, paths)
 
     # ── Summary ─────────────────────────────────────────────────────
     print(f"\n{'='*60}")

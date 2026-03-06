@@ -510,7 +510,7 @@ The server has a `/legal/privacy` endpoint with a default policy. Before going l
 
 Set the `SUPPORT_EMAIL` env var so the legal pages show your real contact:
 ```
-SUPPORT_EMAIL=your-email@example.com
+SUPPORT_EMAIL=info@kelnix.org
 ```
 
 ### 12d. Consider a proper legal review
@@ -662,10 +662,17 @@ STRIPE_COLLECT_ADDRESS=true
 # LEGAL (Step 12)
 # ============================================
 # Contact email shown on /legal/terms and /legal/privacy
-SUPPORT_EMAIL=your-email@example.com
+SUPPORT_EMAIL=info@kelnix.org
 # Optional: link to your own hosted terms/privacy pages
 TERMS_URL=
 PRIVACY_URL=
+
+# ============================================
+# ADMIN (revenue dashboard)
+# ============================================
+# Secret key to access /admin/revenue endpoint
+# Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"
+ADMIN_KEY=
 
 # LEGACY -- optional, agents can self-register instead
 API_KEYS=

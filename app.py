@@ -225,7 +225,7 @@ async def terms_of_service():
     """Terms of Service for the Receipt MCP Server API."""
     terms_url = os.environ.get("TERMS_URL", "")
     return JSONResponse(content={
-        "service": "Receipt Accounting Entry MCP Server",
+        "service": "Receipt Accounting Entry MCP Server by Kelnix",
         "effective_date": "2026-03-06",
         "terms": {
             "1_acceptance": (
@@ -276,7 +276,7 @@ async def terms_of_service():
                 "constitutes acceptance of the updated terms."
             ),
         },
-        "contact": os.environ.get("SUPPORT_EMAIL", "support@example.com"),
+        "contact": os.environ.get("SUPPORT_EMAIL", "info@kelnix.org"),
         "full_terms_url": terms_url or None,
     })
 
@@ -286,7 +286,7 @@ async def privacy_policy():
     """Privacy Policy for the Receipt MCP Server API."""
     privacy_url = os.environ.get("PRIVACY_URL", "")
     return JSONResponse(content={
-        "service": "Receipt Accounting Entry MCP Server",
+        "service": "Receipt Accounting Entry MCP Server by Kelnix",
         "effective_date": "2026-03-06",
         "policy": {
             "1_data_collected": {
@@ -328,7 +328,7 @@ async def privacy_policy():
             "8_children": "This service is not intended for use by anyone under 18.",
             "9_changes": "We may update this policy. Check this endpoint for the latest version.",
         },
-        "contact": os.environ.get("SUPPORT_EMAIL", "support@example.com"),
+        "contact": os.environ.get("SUPPORT_EMAIL", "info@kelnix.org"),
         "full_privacy_url": privacy_url or None,
     })
 
@@ -791,8 +791,159 @@ async def upload_and_process_endpoint(
         raise HTTPException(status_code=500, detail=f"Processing failed: {e}")
 
 
+# ── Admin revenue dashboard ────────────────────────────────────────────
+
+@app.get("/admin/revenue", tags=["Admin"])
+async def admin_revenue(
+    admin_key: Annotated[str, Header(alias="X-Admin-Key")],
+):
+    """Revenue dashboard. Protected by ADMIN_KEY env var. Shows agents, credits, payments."""
+    expected = os.environ.get("ADMIN_KEY", "")
+    if not expected or admin_key != expected:
+        raise HTTPException(status_code=403, detail="Invalid admin key")
+
+    import sqlite3
+    conn = sqlite3.connect(str(db.DB_PATH))
+    conn.row_factory = sqlite3.Row
+
+    # Agent stats
+    agents = conn.execute("SELECT COUNT(*) as total FROM agents").fetchone()
+    agents_by_plan = conn.execute(
+        "SELECT plan, COUNT(*) as count FROM agents GROUP BY plan"
+    ).fetchall()
+
+    # Credit flow
+    credits_granted = conn.execute(
+        "SELECT COALESCE(SUM(delta), 0) as total FROM credits WHERE delta > 0"
+    ).fetchone()
+    credits_spent = conn.execute(
+        "SELECT COALESCE(SUM(ABS(delta)), 0) as total FROM credits WHERE delta < 0"
+    ).fetchone()
+
+    # Revenue by source
+    revenue_by_source = conn.execute("""
+        SELECT
+            CASE
+                WHEN reason LIKE 'stripe_purchase_%' THEN 'stripe_credit_packs'
+                WHEN reason LIKE 'subscription_%' THEN 'stripe_subscriptions'
+                WHEN reason LIKE 'crypto_payment_%' THEN 'crypto_payments'
+                WHEN reason = 'free_tier_signup' THEN 'free_signup'
+                ELSE 'other'
+            END as source,
+            COUNT(*) as transactions,
+            SUM(delta) as credits_granted
+        FROM credits
+        WHERE delta > 0
+        GROUP BY source
+        ORDER BY credits_granted DESC
+    """).fetchall()
+
+    # Crypto payment stats
+    crypto_stats = conn.execute("""
+        SELECT
+            status,
+            COUNT(*) as count,
+            COALESCE(SUM(locked_fiat_usd), 0) as total_usd
+        FROM crypto_payments
+        GROUP BY status
+    """).fetchall()
+
+    # Recent transactions (last 20 credit additions)
+    recent_purchases = conn.execute("""
+        SELECT c.api_key, c.delta, c.reason, c.created_at, a.agent_name
+        FROM credits c
+        LEFT JOIN agents a ON c.api_key = a.api_key
+        WHERE c.delta > 0 AND c.reason != 'free_tier_signup'
+        ORDER BY c.created_at DESC
+        LIMIT 20
+    """).fetchall()
+
+    # Top agents by spend
+    top_agents = conn.execute("""
+        SELECT
+            a.agent_name,
+            a.plan,
+            a.created_at as registered,
+            COALESCE(SUM(CASE WHEN c.delta < 0 THEN ABS(c.delta) ELSE 0 END), 0) as credits_used,
+            COALESCE(SUM(CASE WHEN c.delta > 0 THEN c.delta ELSE 0 END), 0) as credits_received
+        FROM agents a
+        LEFT JOIN credits c ON a.api_key = c.api_key
+        GROUP BY a.api_key
+        ORDER BY credits_used DESC
+        LIMIT 20
+    """).fetchall()
+
+    # Daily processing volume (last 30 days)
+    daily_volume = conn.execute("""
+        SELECT
+            DATE(created_at) as day,
+            COUNT(*) as receipts_processed
+        FROM credits
+        WHERE delta < 0 AND reason = 'process_receipt'
+            AND created_at >= DATE('now', '-30 days')
+        GROUP BY day
+        ORDER BY day DESC
+    """).fetchall()
+
+    conn.close()
+
+    return JSONResponse(content={
+        "summary": {
+            "total_agents": agents["total"],
+            "agents_by_plan": {r["plan"]: r["count"] for r in agents_by_plan},
+            "total_credits_granted": credits_granted["total"],
+            "total_credits_spent": credits_spent["total"],
+            "credits_in_circulation": credits_granted["total"] - credits_spent["total"],
+        },
+        "revenue_by_source": [
+            {
+                "source": r["source"],
+                "transactions": r["transactions"],
+                "credits_granted": r["credits_granted"],
+            }
+            for r in revenue_by_source
+        ],
+        "crypto_payments": [
+            {
+                "status": r["status"],
+                "count": r["count"],
+                "total_usd": round(r["total_usd"], 2),
+            }
+            for r in crypto_stats
+        ],
+        "recent_purchases": [
+            {
+                "agent": r["agent_name"],
+                "credits": r["delta"],
+                "reason": r["reason"],
+                "date": r["created_at"],
+            }
+            for r in recent_purchases
+        ],
+        "top_agents": [
+            {
+                "agent": r["agent_name"],
+                "plan": r["plan"],
+                "registered": r["registered"],
+                "credits_used": r["credits_used"],
+                "credits_received": r["credits_received"],
+            }
+            for r in top_agents
+        ],
+        "daily_volume_30d": [
+            {"date": r["day"], "receipts": r["receipts_processed"]}
+            for r in daily_volume
+        ],
+        "cost_estimate": {
+            "note": "Approximate API costs based on Haiku 4.5 at ~$0.007/receipt",
+            "total_receipts_processed": credits_spent["total"],
+            "estimated_api_cost_usd": round(credits_spent["total"] * 0.007, 2),
+        },
+    })
+
+
 # ── Health ───────────────────────────────────────────────────────────────
 
 @app.get("/health", tags=["System"])
 async def health():
-    return {"status": "ok", "version": "3.1.0"}
+    return {"status": "ok", "version": "3.2.0"}
