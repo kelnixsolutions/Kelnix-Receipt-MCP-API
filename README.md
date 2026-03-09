@@ -54,9 +54,6 @@ A production-ready, agent-native MCP server that converts receipt images and PDF
   - [Install & Run](#install--run)
   - [Environment Variables](#environment-variables)
 - [File Structure](#file-structure)
-- [Marketing Strategy](#marketing-strategy)
-- [Before Going Live](#before-going-live)
-- [Launch Checklist](#launch-checklist)
 - [License](#license)
 
 ---
@@ -464,7 +461,6 @@ Returns:
 - **Recent purchases** -- last 20 paid credit additions with agent name, credits, reason, and date
 - **Top agents** -- top 20 agents ranked by credit usage, with plan and registration date
 - **Daily volume** -- receipts processed per day for the last 30 days
-- **Cost estimate** -- approximate API costs based on $0.007/receipt (Haiku 4.5)
 
 ---
 
@@ -563,12 +559,10 @@ All tools include `"setup_required": "register_agent"` in constraints. The `buy_
 |---|---|
 | Accuracy | 88-95% across receipt types |
 | Latency | 1-5 seconds per receipt |
-| Cost | ~$0.007 per call |
 | Upfront cost | $0 |
 | Setup time | Minutes |
-| Profit margin | 77-91% per credit |
 
-**Why Haiku 4.5:** 3x cheaper than Sonnet with excellent accuracy for receipt OCR. Zero upfront hardware cost means you generate revenue from day one. Switch to Sonnet 4.6 (`~$0.02/call`) in `tools.py` if you need higher accuracy for complex receipts.
+**Why Haiku 4.5:** Excellent accuracy for receipt OCR at the best cost/quality ratio. Switch to Sonnet 4.6 in `tools.py` if you need higher accuracy for complex receipts.
 
 ### Alternative: Fully Local with Ollama
 
@@ -689,8 +683,6 @@ The `/integrations` endpoint also returns copy-paste snippets for LangGraph, Cre
             (FastAPI endpoints)     (via MCP SDK transport)
 ```
 
-See [MARKETING.md](MARKETING.md) for the full go-to-market strategy.
-
 ---
 
 ## Project Status
@@ -705,170 +697,51 @@ See [MARKETING.md](MARKETING.md) for the full go-to-market strategy.
 
 ---
 
-## Setup
-
-### Prerequisites
-
-- Python 3.11+
-- An Anthropic API key ([console.anthropic.com](https://console.anthropic.com))
-- Redis (for async processing -- optional for sync-only use)
-- Stripe account (for fiat billing -- optional for dev/testing)
-- NOWPayments account (for crypto billing -- optional for dev/testing)
-
-### Install & Run
+## Self-Hosting
 
 ```bash
 git clone https://github.com/TiagoX9/Receipt-Accounting-Entry-MCP-Server.git
 cd Receipt-Accounting-Entry-MCP-Server
-
 pip install -r requirements.txt
-
-# Required
 export ANTHROPIC_API_KEY=sk-ant-...
-
-# Billing (optional -- billing endpoints will error without these)
-export STRIPE_SECRET_KEY=sk_test_...
-export STRIPE_WEBHOOK_SECRET=whsec_...
-export STRIPE_BASIC_PRICE_ID=price_...
-export STRIPE_PRO_PRICE_ID=price_...
-
-# Crypto payments (optional -- crypto endpoints will error without these)
-export NOWPAYMENTS_API_KEY=...
-export NOWPAYMENTS_IPN_SECRET=...
-export CRYPTO_IPN_CALLBACK_URL=https://your-server.com/billing/crypto_webhook
-
-# Async processing (optional -- only needed for /tools/process_receipt_async)
-export REDIS_URL=redis://localhost:6379/0
-
-# Legacy API keys (optional -- agents can self-register instead)
-# export API_KEYS=my-legacy-key-1,my-legacy-key-2
-
-# Admin dashboard (optional -- protects /admin/revenue)
-export ADMIN_KEY=your-secret-admin-key
-
-# Tax & invoices (optional -- enables Stripe automatic tax + address collection)
-export STRIPE_TAX_ENABLED=true
-export STRIPE_COLLECT_ADDRESS=true
-
-# Organization contact (optional)
-export SUPPORT_EMAIL=info@kelnix.org
-
-uvicorn app:app --reload
+uvicorn app:app --host 0.0.0.0 --port 8000
 ```
 
-For async processing, also start a Celery worker:
-```bash
-celery -A tasks.celery_app worker --loglevel=info
-```
+Requires Python 3.11+. See `deploy/setup.sh` for production deployment with nginx, SSL, and systemd.
 
-The server starts at `http://localhost:8000`.
-
-- **MCP tools:** `http://localhost:8000/mcp`
-- **Swagger docs:** `http://localhost:8000/docs`
-- **Health check:** `http://localhost:8000/health`
-- **Pricing:** `http://localhost:8000/pricing`
-- **Terms of Service:** `http://localhost:8000/legal/terms`
-- **Privacy Policy:** `http://localhost:8000/legal/privacy`
-- **Integrations:** `http://localhost:8000/integrations`
-
-### Environment Variables
-
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `ANTHROPIC_API_KEY` | Yes | -- | Anthropic API key for Claude vision |
-| `STRIPE_SECRET_KEY` | No | -- | Stripe secret key for billing |
-| `STRIPE_WEBHOOK_SECRET` | No | -- | Stripe webhook signing secret |
-| `STRIPE_BASIC_PRICE_ID` | No | -- | Stripe Price ID for basic plan |
-| `STRIPE_PRO_PRICE_ID` | No | -- | Stripe Price ID for pro plan |
-| `NOWPAYMENTS_API_KEY` | No | -- | NOWPayments API key for crypto billing |
-| `NOWPAYMENTS_IPN_SECRET` | No | -- | NOWPayments IPN signing secret |
-| `CRYPTO_IPN_CALLBACK_URL` | No | -- | Your public URL for crypto payment callbacks |
-| `REDIS_URL` | No | `redis://localhost:6379/0` | Redis URL for Celery task queue |
-| `API_KEYS` | No | -- | Legacy comma-separated API keys (no default) |
-| `ADMIN_KEY` | No | -- | Secret key for `/admin/revenue` dashboard |
-| `STRIPE_TAX_ENABLED` | No | -- | Set to `true` to enable automatic tax calculation |
-| `STRIPE_COLLECT_ADDRESS` | No | -- | Set to `true` to require billing address + tax ID |
-| `SUPPORT_EMAIL` | No | `info@kelnix.org` | Contact email shown in legal endpoints |
+| Variable | Required | Description |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | Yes | Anthropic API key for Claude vision |
+| `STRIPE_SECRET_KEY` | No | Stripe secret key for billing |
+| `STRIPE_WEBHOOK_SECRET` | No | Stripe webhook signing secret |
+| `NOWPAYMENTS_API_KEY` | No | NOWPayments API key for crypto |
+| `REDIS_URL` | No | Redis URL for async processing |
 
 ---
 
 ## File Structure
 
 ```
-├── app.py                 # FastAPI application, routes, auth, credit middleware
-├── mcp_server.py          # Official MCP protocol server (stdio/SSE transport)
-├── models.py              # Pydantic request/response schemas
-├── db.py                  # SQLite helpers (connection pool, WAL, API key cache)
-├── tools.py               # Core tool logic + MCP descriptor generator
-├── billing.py             # Stripe + crypto billing (atomic deduction, checkout, IPN)
-├── crypto_gateway.py      # NOWPayments abstraction (persistent async client)
-├── tasks.py               # Celery async task definitions
-├── webhooks.py            # Async webhook dispatch (fire-and-forget)
-├── test_all.py            # 152-test end-to-end test suite
-├── smithery.yaml          # Smithery.ai MCP registry configuration
-├── mcp_config_example.json # Claude Desktop / Cursor config example
+├── app.py                  # FastAPI application, routes, auth
+├── mcp_server.py           # MCP protocol server (stdio/SSE)
+├── tools.py                # Core tool logic + MCP descriptors
+├── billing.py              # Stripe + crypto billing
+├── crypto_gateway.py       # NOWPayments integration
+├── db.py                   # SQLite (WAL, connection pool)
+├── models.py               # Pydantic schemas
+├── tasks.py                # Celery async tasks
+├── webhooks.py             # Async webhook dispatch
+├── test_all.py             # 152-test e2e suite
 ├── deploy/
-│   ├── setup.sh           # One-command Hetzner/VPS deploy (nginx, SSL, systemd)
-│   └── update.sh          # Pull latest code and restart server
+│   ├── setup.sh            # VPS deploy (nginx, SSL, systemd)
+│   └── update.sh           # Pull & restart
 ├── examples/
-│   ├── quick_start.py     # 10-line end-to-end example
-│   ├── langgraph_agent.py # LangGraph tool integration
-│   └── crewai_tool.py     # CrewAI BaseTool integration
-├── requirements.txt       # Python dependencies
-├── BEFORE_GOING_LIVE.md   # Complete setup guide: keys, deploy, verify (START HERE)
-├── LAUNCH_CHECKLIST.md    # Post-deploy: registries, social, marketing
-├── MARKETING.md           # Go-to-market strategy for AI agent distribution
-├── CREDENTIALS_NEEDED.md  # API key reference
-├── .gitignore
-└── README.md
+│   ├── quick_start.py      # 10-line quickstart
+│   ├── langgraph_agent.py  # LangGraph integration
+│   └── crewai_tool.py      # CrewAI integration
+├── smithery.yaml           # Smithery registry config
+└── mcp_config_example.json # Claude Desktop config
 ```
-
----
-
-## Marketing Strategy
-
-See [MARKETING.md](MARKETING.md) for the complete go-to-market playbook covering:
-
-- **Positioning** -- How to frame this for agent developers
-- **Distribution** -- MCP registries, GitHub, framework ecosystems, content marketing
-- **Growth loops** -- Free-tier virality, agent-to-agent referral, framework lock-in
-- **Launch playbook** -- Week-by-week action plan
-- **Metrics** -- Registration, activation, revenue, and retention targets
-- **Competitive moat** -- Why this is defensible long-term
-- **Partnerships** -- Anthropic, LangChain, CrewAI, Composio
-
----
-
-## Before Going Live
-
-See **[BEFORE_GOING_LIVE.md](BEFORE_GOING_LIVE.md)** for the complete step-by-step setup guide. Covers:
-
-1. **Get API keys** -- Anthropic, Stripe, NOWPayments (with exact URLs and what to click)
-2. **Set up billing** -- Create Stripe products, configure crypto IPN
-3. **Create .env file** -- Copy-paste template with every variable explained
-4. **Test locally** -- Run tests, smoke test commands
-5. **Deploy** -- Step-by-step for Railway, Render, and Fly.io
-6. **Configure webhooks** -- Set callback URLs after deployment
-7. **Verify** -- 6 curl commands to confirm everything works
-8. **Cost breakdown** -- What each service costs you vs. what you charge
-9. **Pricing & profitability** -- Per-receipt cost analysis, margin tables, break-even analysis
-10. **Set up taxes & invoices** -- Stripe Tax, invoice generation, VAT/sales tax registration
-11. **Legal compliance** -- Review Terms of Service and Privacy Policy, GDPR/CCPA checklist
-
-Includes a "Quick Decision Guide" at the bottom for different launch strategies (minimal, Stripe-only, full setup, cheapest start).
-
----
-
-## Launch Checklist
-
-See [LAUNCH_CHECKLIST.md](LAUNCH_CHECKLIST.md) for the complete step-by-step guide to making this tool discoverable. Covers:
-
-1. **Deploy** -- hosting options (Railway, Fly.io, Render), env vars, verification
-2. **GitHub** -- topics, description, website URL to add
-3. **MCP Registries** -- exact steps for Smithery, Composio, Glama, Arcade.dev
-4. **Framework Ecosystem** -- PRs to submit for LangChain and CrewAI community tools
-5. **Content & Social** -- Hacker News post template, Twitter thread template, Reddit subs, Discord channels, blog outline
-6. **Ongoing** -- weekly, monthly, and quarterly maintenance tasks
 
 ---
 
