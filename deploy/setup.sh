@@ -76,7 +76,7 @@ STRIPE_PRO_PRICE_ID=price_...
 # CRYPTO_IPN_CALLBACK_URL=https://your-domain.com/billing/crypto_webhook
 
 # ─── ADMIN DASHBOARD ───────────────────────────────────────────────────
-ADMIN_KEY=change-this-to-a-long-random-string
+ADMIN_KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
 
 # ─── OPTIONAL ───────────────────────────────────────────────────────────
 SUPPORT_EMAIL=info@kelnix.org

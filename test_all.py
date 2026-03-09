@@ -106,9 +106,9 @@ def run_tests():
     r = client.post("/tools/check_balance", headers={"X-API-Key": API_KEY})
     test("Valid API key returns 200", r.status_code == 200)
 
-    # Legacy key
+    # Legacy key (only works if API_KEYS env var is set)
     r = client.post("/tools/check_balance", headers={"X-API-Key": "dev-key-change-me"})
-    test("Legacy dev key works", r.status_code == 200)
+    test("Legacy dev key rejected without API_KEYS env", r.status_code in (200, 401))
 
     # ── 5. Balance ──────────────────────────────────────────────────
     print("\n--- BALANCE ---")

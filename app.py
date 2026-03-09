@@ -59,8 +59,6 @@ def _load_legacy_keys() -> None:
     raw = os.environ.get("API_KEYS", "")
     if raw:
         _LEGACY_KEYS.update(k.strip() for k in raw.split(",") if k.strip())
-    if not _LEGACY_KEYS:
-        _LEGACY_KEYS.add("dev-key-change-me")
 
 
 # ── Auth dependency ─────────────────────────────────────────────────────

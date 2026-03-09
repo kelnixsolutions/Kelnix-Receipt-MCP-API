@@ -741,7 +741,7 @@ export CRYPTO_IPN_CALLBACK_URL=https://your-server.com/billing/crypto_webhook
 export REDIS_URL=redis://localhost:6379/0
 
 # Legacy API keys (optional -- agents can self-register instead)
-export API_KEYS=dev-key-change-me
+# export API_KEYS=my-legacy-key-1,my-legacy-key-2
 
 # Admin dashboard (optional -- protects /admin/revenue)
 export ADMIN_KEY=your-secret-admin-key
@@ -784,7 +784,7 @@ The server starts at `http://localhost:8000`.
 | `NOWPAYMENTS_IPN_SECRET` | No | -- | NOWPayments IPN signing secret |
 | `CRYPTO_IPN_CALLBACK_URL` | No | -- | Your public URL for crypto payment callbacks |
 | `REDIS_URL` | No | `redis://localhost:6379/0` | Redis URL for Celery task queue |
-| `API_KEYS` | No | `dev-key-change-me` | Legacy comma-separated API keys |
+| `API_KEYS` | No | -- | Legacy comma-separated API keys (no default) |
 | `ADMIN_KEY` | No | -- | Secret key for `/admin/revenue` dashboard |
 | `STRIPE_TAX_ENABLED` | No | -- | Set to `true` to enable automatic tax calculation |
 | `STRIPE_COLLECT_ADDRESS` | No | -- | Set to `true` to require billing address + tax ID |
