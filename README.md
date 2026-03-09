@@ -1,332 +1,61 @@
 # Receipt → Accounting Entry MCP Server
 
-A production-ready, agent-native MCP server that converts receipt images and PDFs into structured, accounting-ready JSON. Built for the agentic era where AI agents autonomously handle expense management, accounts payable, and bookkeeping workflows.
+Turn receipt images and PDFs into structured, accounting-ready JSON. One API call.
 
-**Version 3.2.0** -- credit-based billing via Stripe + crypto payments (300+ coins via NOWPayments), self-service agent registration, webhook notifications, async processing via Celery, idempotency support, pricing transparency, legal compliance (ToS + Privacy Policy), admin revenue dashboard, and framework quickstarts for LangGraph / CrewAI / AutoGen.
+Built for AI agents that handle expense management, accounts payable, and bookkeeping. No dashboard, no login — just an API.
+
+**50 free credits on signup. No credit card required.**
 
 **Built by [Kelnix](https://kelnix.org)** — Contact: info@kelnix.org
 
 ---
 
-## Table of Contents
+## Quickstart
 
-- [Why This Product Exists in 2026](#why-this-product-exists-in-2026)
-- [Target Customers](#target-customers)
-- [Agent-Native Design Principles](#agent-native-design-principles)
-- [Architecture](#architecture)
-  - [Tech Stack](#tech-stack)
-- [Quickstart for Agents](#quickstart-for-agents)
-  - [1. Discover available tools](#1-discover-available-tools)
-  - [2. Register (self-service)](#2-register-self-service)
-  - [3. Check your balance](#3-check-your-balance)
-  - [4. Upload a receipt](#4-upload-a-receipt)
-  - [5. Process the receipt (1 credit)](#5-process-the-receipt-1-credit)
-  - [6. Upload + process in one call](#6-upload--process-in-one-call)
-  - [7. List your receipts](#7-list-your-receipts)
-  - [8. Buy more credits](#8-buy-more-credits)
-  - [9. Or subscribe monthly](#9-or-subscribe-monthly)
-  - [10. Set up webhook alerts](#10-set-up-webhook-alerts)
-- [Monetization](#monetization)
-  - [Credit System](#credit-system)
-  - [Credit Packs](#credit-packs-one-time-purchase-via-stripe-checkout)
-  - [Subscription Plans](#subscription-plans)
-  - [How billing works](#how-billing-works)
-  - [Crypto Payments](#crypto-payments)
-- [Pricing Transparency](#pricing-transparency)
-- [Legal Compliance](#legal-compliance)
-- [Admin Revenue Dashboard](#admin-revenue-dashboard)
-- [Async Processing (Celery + Redis)](#async-processing-celery--redis)
-- [Webhook Events](#webhook-events)
-- [Framework Integration Quickstarts](#framework-integration-quickstarts)
-- [MCP Endpoint Details](#mcp-endpoint-details)
-- [Backend Choice Rationale](#backend-choice-rationale-march-2026)
-  - [Claude Haiku 4.5 Vision API](#recommended-claude-haiku-45-vision-api)
-  - [Fully Local with Ollama](#alternative-fully-local-with-ollama)
-- [How Agents Find This Tool](#how-agents-find-this-tool)
-  - [1. MCP Protocol (stdio)](#1-mcp-protocol-stdio--claude-desktop-cursor-vs-code)
-  - [2. Well-Known Discovery](#2-well-known-discovery)
-  - [3. MCP Registries](#3-mcp-registries-smithery-composio-glama)
-  - [4. HTTP Discovery](#4-http-discovery-endpoint)
-  - [5. Framework Integrations](#5-framework-integrations)
-- [Project Status](#project-status)
-- [Setup](#setup)
-  - [Prerequisites](#prerequisites)
-  - [Install & Run](#install--run)
-  - [Environment Variables](#environment-variables)
-- [File Structure](#file-structure)
-- [License](#license)
-
----
-
-## Why This Product Exists in 2026
-
-The agent economy is here. AI agents are autonomously purchasing SaaS tools, managing procurement, and handling expense workflows on behalf of companies. But there's a critical gap:
-
-- **Receipts are everywhere, structure is nowhere.** Every purchase generates a receipt -- a messy image or PDF that needs to become a clean accounting entry. This happens millions of times per day.
-- **Agents can't read receipts natively.** Even vision-capable agents need specialized extraction logic, few-shot prompting, and structured output enforcement to reliably parse receipts into GL-ready data.
-- **No clean, atomic, MCP-native tools exist** for this workflow. Existing OCR services are human-first, require dashboards, and don't speak MCP.
-
-This server fills that gap: a single `/mcp` endpoint that any agent can discover, understand, and call to turn receipts into accounting entries.
-
-**Product-market fit signal:** Every agent doing expense management needs this. It's high-frequency, high-pain, and high-value.
-
----
-
-## Target Customers
-
-| Customer Type | Use Case |
-|---|---|
-| **AI expense agents** | Auto-categorise and book employee receipts |
-| **AP automation agents** | Extract vendor invoice data for payment processing |
-| **Bookkeeping agents** | Convert paper receipts to journal entries |
-| **Procurement agents** | Verify purchase receipts against POs |
-| **Multi-agent systems** | Composable receipt tool in LangGraph / CrewAI pipelines |
-| **Fintech platforms** | Embed receipt parsing into expense apps |
-
-The primary interface is **API-first** -- there is no human dashboard. Agents are the users.
-
----
-
-## Agent-Native Design Principles
-
-This server was built agent-first, following these principles:
-
-1. **API = primary interface.** No login screen, no dashboard, no human UI. The `/mcp` endpoint is how agents discover and use the service.
-2. **Atomic, composable tools.** Each tool does one thing well. Agents compose them as needed -- or use `upload_and_process` for a single-call shortcut.
-3. **Rich LLM-friendly metadata.** The `/mcp` endpoint returns full JSON schemas, natural-language descriptions, input/output examples, and constraint metadata -- everything an LLM needs to call tools correctly on the first try.
-4. **Structured, predictable output.** Every response follows a strict Pydantic schema with confidence scores, so downstream agents can make programmatic decisions.
-5. **Programmatic monetization.** Credit-based billing + Stripe Checkout + crypto payments -- agents buy credits via API, no human checkout pages required.
-6. **Self-service registration.** `POST /register_agent` returns an API key + 50 free credits instantly. No approval flow.
-7. **Safe retries.** Idempotency keys on `upload_and_process` prevent duplicate charges. Request IDs on every response for tracing.
-
----
-
-## Architecture
-
-```
-Agent / Multi-Agent System
-         |
-         v
-    GET /mcp  ─────────►  Tool catalogue (8 tools + metadata)
-         |
-    POST /register_agent ─► API key + 50 free credits + Stripe customer
-         |
-         v
-    POST /tools/*  ────►  FastAPI endpoints
-         |                  |
-         |── upload_receipt ──► Local storage + SQLite
-         |── process_receipt ──► Credit check → Claude Haiku 4.5 Vision
-         |── upload_and_process ──► Combined (1 call, idempotent)
-         |── process_receipt_async → Celery + Redis → Claude Vision
-         |── get_receipt_markdown ──► Cached render
-         |── suggest_gl_account ──► Credit check → Claude reasoning
-         |── list_receipts ──► Paginated receipt history
-         └── check_balance ──► Current credits + plan
-                                    |
-    POST /billing/*  ──────►  Stripe integration
-         |── buy_credits ──► Stripe Checkout session
-         |── subscribe ──► Monthly plan (basic/pro)
-         |── webhook ──► Stripe events → credit updates
-         └── balance ──► Credits + history
-
-    POST /billing/buy_credits_crypto ──► NOWPayments → any crypto
-         |── check_payment_status ──► Poll or IPN webhook
-         └── crypto_webhook ──► IPN confirmed → grant credits
-
-    POST /subscribe_webhook ──► Low balance & processing alerts
-    GET  /integrations ──► LangGraph / CrewAI / AutoGen snippets
-
-    GET  /pricing ────────►  Public pricing (packs, plans, tool costs)
-    GET  /legal/terms ────►  Terms of Service
-    GET  /legal/privacy ──►  Privacy Policy
-    GET  /admin/revenue ──►  Revenue dashboard (X-Admin-Key protected)
-```
-
-### Tech Stack
-
-| Component | Choice | Why |
-|---|---|---|
-| Framework | FastAPI + uvicorn | Async, fast, auto-docs at `/docs` |
-| Vision AI | Claude Haiku 4.5 via Anthropic SDK | Best cost/accuracy ratio for receipt OCR |
-| Database | SQLite (WAL mode, connection pool) | Zero-config, thread-safe, indexed |
-| Storage | Local disk (`uploads/`) | Simple for MVP, swap to S3 later |
-| Validation | Pydantic v2 | Strict schemas, fast serialization |
-| Auth | API key (X-API-Key header) + TTL cache | Stateless, agent-friendly, fast |
-| Billing | Stripe (Checkout + Webhooks) | Programmatic credit purchases |
-| Crypto | NOWPayments (300+ coins) | Any-crypto payments with fiat-lock |
-| Task queue | Celery + Redis | Async receipt processing |
-| File I/O | aiofiles | Non-blocking uploads |
-
----
-
-## Quickstart for Agents
-
-### 1. Discover available tools
+### 1. Register (instant, no approval)
 
 ```bash
-curl https://your-server.com/mcp
-```
-
-Returns a JSON array describing all 8 tools, their parameters, examples, costs, and constraints.
-
-### 2. Register (self-service)
-
-```bash
-curl -X POST https://your-server.com/register_agent \
+curl -X POST https://receipt-mcp-api.kelnix.org/register_agent \
   -H "Content-Type: application/json" \
-  -d '{"agent_name": "expense-bot-v1", "org_id": "acme-corp"}'
+  -d '{"agent_name": "my-expense-bot"}'
 ```
 
-Response:
-```json
-{
-  "api_key": "rct_a1b2c3d4...",
-  "agent_name": "expense-bot-v1",
-  "org_id": "acme-corp",
-  "stripe_customer_id": "cus_...",
-  "free_credits": 50
-}
-```
+Returns your API key + 50 free credits.
 
-### 3. Check your balance
+### 2. Process a receipt (1 credit)
 
 ```bash
-curl -X POST https://your-server.com/tools/check_balance \
-  -H "X-API-Key: rct_a1b2c3d4..."
-```
-
-Response:
-```json
-{"credits": 50, "plan": "free"}
-```
-
-### 4. Upload a receipt
-
-```bash
-curl -X POST https://your-server.com/tools/upload_receipt \
-  -H "X-API-Key: rct_a1b2c3d4..." \
+curl -X POST https://receipt-mcp-api.kelnix.org/tools/upload_and_process \
+  -H "X-API-Key: rct_your-key-here" \
   -F "file=@receipt.jpg" \
   -F "mime_type=image/jpeg"
 ```
 
-### 5. Process the receipt (1 credit)
+Returns structured JSON: vendor, date, line items, totals, tax, currency, confidence scores.
+
+### 3. Buy more credits when you need them
 
 ```bash
-curl -X POST https://your-server.com/tools/process_receipt \
-  -H "X-API-Key: rct_a1b2c3d4..." \
-  -H "Content-Type: application/json" \
-  -d '{"receipt_id": "a1b2c3d4e5f67890"}'
-```
-
-If you have 0 credits, you get a `402` response with actionable links:
-```json
-{
-  "detail": {
-    "error": "Insufficient credits: 0 available, 1 required.",
-    "buy_credits_url": "/billing/buy_credits",
-    "buy_credits_crypto_url": "/billing/buy_credits_crypto",
-    "subscribe_url": "/billing/subscribe",
-    "pricing_url": "/pricing",
-    "cheapest_option": "100 credits for $5.00 at POST /billing/buy_credits"
-  }
-}
-```
-
-### 6. Upload + process in one call
-
-Save a round-trip with the combo endpoint. Supports idempotency keys for safe retries:
-
-```bash
-curl -X POST https://your-server.com/tools/upload_and_process \
-  -H "X-API-Key: rct_a1b2c3d4..." \
-  -F "file=@receipt.jpg" \
-  -F "mime_type=image/jpeg" \
-  -F "idempotency_key=my-unique-key-123"
-```
-
-Returns the same structured expense data as `process_receipt`, but in a single call. If you retry with the same idempotency key, you get the cached result without being charged again.
-
-### 7. List your receipts
-
-```bash
-curl -X POST https://your-server.com/tools/list_receipts \
-  -H "X-API-Key: rct_a1b2c3d4..." \
-  -H "Content-Type: application/json" \
-  -d '{"limit": 10, "status": "processed"}'
-```
-
-Response:
-```json
-{
-  "receipts": [
-    {
-      "receipt_id": "a1b2c3d4e5f67890",
-      "status": "processed",
-      "mime_type": "image/jpeg",
-      "created_at": "2026-03-04 10:00:00",
-      "updated_at": "2026-03-04 10:00:05"
-    }
-  ]
-}
-```
-
-### 8. Buy more credits
-
-```bash
-curl -X POST https://your-server.com/billing/buy_credits \
-  -H "X-API-Key: rct_a1b2c3d4..." \
+# With card (Stripe)
+curl -X POST https://receipt-mcp-api.kelnix.org/billing/buy_credits \
+  -H "X-API-Key: rct_your-key-here" \
   -H "Content-Type: application/json" \
   -d '{"credits": 1000}'
-```
 
-Response:
-```json
-{
-  "checkout_url": "https://checkout.stripe.com/c/pay/...",
-  "session_id": "cs_..."
-}
-```
-
-### 9. Or subscribe monthly
-
-```bash
-curl -X POST https://your-server.com/billing/subscribe \
-  -H "X-API-Key: rct_a1b2c3d4..." \
+# With crypto (300+ coins)
+curl -X POST https://receipt-mcp-api.kelnix.org/billing/buy_credits_crypto \
+  -H "X-API-Key: rct_your-key-here" \
   -H "Content-Type: application/json" \
-  -d '{"plan": "pro"}'
-```
-
-### 10. Set up webhook alerts
-
-```bash
-curl -X POST https://your-server.com/subscribe_webhook \
-  -H "X-API-Key: rct_a1b2c3d4..." \
-  -H "Content-Type: application/json" \
-  -d '{
-    "url": "https://your-agent.com/webhook",
-    "events": ["low_balance", "processing_complete"]
-  }'
+  -d '{"credits": 1000, "preferred_coin": "eth"}'
 ```
 
 ---
 
-## Monetization
+## Pricing
 
-### Credit System
+### Credit Packs
 
-| Action | Cost |
-|---|---|
-| `upload_receipt` | Free |
-| `process_receipt` | 1 credit |
-| `upload_and_process` | 1 credit |
-| `get_receipt_markdown` | Free |
-| `suggest_gl_account` | 1 credit |
-| `check_balance` | Free |
-| `list_receipts` | Free |
-
-### Credit Packs (one-time purchase via Stripe Checkout)
-
-| Credits | Price | Per-credit |
+| Credits | Price | Per credit |
 |---|---|---|
 | 100 | $5 | $0.050 |
 | 500 | $20 | $0.040 |
@@ -334,275 +63,90 @@ curl -X POST https://your-server.com/subscribe_webhook \
 | 5,000 | $150 | $0.030 |
 | 10,000 | $300 | $0.030 |
 
-### Subscription Plans
+### Subscriptions
 
-| Plan | Credits/mo | Price | Per-credit |
+| Plan | Credits/mo | Price |
+|---|---|---|
+| Free | 50 (signup) | $0 |
+| Basic | 200/mo | $15/mo |
+| Pro | 2,000/mo | $99/mo |
+
+### What costs credits
+
+| Tool | Cost |
+|---|---|
+| `process_receipt` | 1 credit |
+| `upload_and_process` | 1 credit |
+| `suggest_gl_account` | 1 credit |
+| `upload_receipt` | Free |
+| `get_receipt_markdown` | Free |
+| `check_balance` | Free |
+| `list_receipts` | Free |
+
+Full pricing also available at `GET /pricing` (no auth required).
+
+---
+
+## All Endpoints
+
+### Tools
+
+| Method | Endpoint | Cost | Description |
 |---|---|---|---|
-| Free | 50 (signup bonus) | $0 | -- |
-| Basic | 200/mo | $15/mo | $0.075 |
-| Pro | 2,000/mo | $99/mo | $0.050 |
+| POST | `/tools/upload_receipt` | Free | Upload receipt image/PDF |
+| POST | `/tools/process_receipt` | 1 credit | Extract structured data |
+| POST | `/tools/upload_and_process` | 1 credit | Upload + process in one call (supports idempotency) |
+| POST | `/tools/get_receipt_markdown` | Free | Get processed receipt as Markdown |
+| POST | `/tools/suggest_gl_account` | 1 credit | AI-suggest GL account code |
+| POST | `/tools/check_balance` | Free | Check credits and plan |
+| POST | `/tools/list_receipts` | Free | List receipts with filters |
+| POST | `/tools/process_receipt_async` | 1 credit | Queue async processing (requires Redis) |
 
-### How billing works
+### Billing
 
-1. Agent calls `POST /register_agent` -- gets API key + 50 free credits
-2. Agent calls paid tools -- 1 credit deducted atomically per call
-3. At 0 credits, paid endpoints return `402` with buy/subscribe links
-4. Agent calls `POST /billing/buy_credits` or `POST /billing/subscribe` -- gets Stripe Checkout URL
-5. Stripe webhook (`POST /billing/webhook`) credits the account automatically
-6. If agent subscribed to `low_balance` webhook, they get notified when credits drop below 5
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/billing/buy_credits` | Buy credit pack (Stripe Checkout) |
+| POST | `/billing/subscribe` | Subscribe to monthly plan |
+| POST | `/billing/buy_credits_crypto` | Buy credits with 300+ cryptocurrencies |
+| POST | `/billing/check_payment_status` | Check crypto payment status |
+| GET | `/billing/balance` | Full balance with transaction history |
 
-No human in the loop. Fully programmatic.
+### Discovery & Info
 
-### Crypto Payments
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/mcp` | Tool catalogue with schemas, examples, constraints |
+| GET | `/.well-known/mcp.json` | MCP server discovery metadata |
+| GET | `/pricing` | Public pricing (no auth) |
+| GET | `/legal/terms` | Terms of Service |
+| GET | `/legal/privacy` | Privacy Policy |
+| GET | `/integrations` | Code snippets for LangGraph, CrewAI, AutoGen |
+| GET | `/docs` | Interactive Swagger documentation |
+| GET | `/health` | Health check |
 
-Pay with **any of 300+ cryptocurrencies** -- BTC, ETH, SOL, USDC, USDT, DOGE, LTC, XMR, MATIC, AVAX, and more. Credits are always priced in USD. The exact crypto amount is quoted at the current exchange rate and locked for ~20 minutes.
+### Auth
 
-**Buy credits with crypto:**
-```bash
-curl -X POST https://your-server.com/billing/buy_credits_crypto \
-  -H "X-API-Key: rct_a1b2c3d4..." \
-  -H "Content-Type: application/json" \
-  -d '{"credits": 1000, "preferred_coin": "eth"}'
-```
+All tool and billing endpoints require `X-API-Key` header. Get a key via `POST /register_agent`.
 
-Response:
+When you run out of credits, paid endpoints return `402` with links to buy more:
+
 ```json
 {
-  "payment_id": "5678901234",
-  "quoted_crypto_amount": 0.0167,
-  "currency": "ETH",
-  "address": "0xabc123...",
-  "expiry": "2026-03-04T15:30:00Z",
-  "fiat_locked": 40.00,
-  "rate_used": 2395.21,
-  "credits": 1000
+  "error": "Insufficient credits: 0 available, 1 required.",
+  "buy_credits_url": "/billing/buy_credits",
+  "buy_credits_crypto_url": "/billing/buy_credits_crypto",
+  "pricing_url": "/pricing",
+  "cheapest_option": "100 credits for $5.00"
 }
 ```
 
-**Check payment status:**
-```bash
-curl -X POST https://your-server.com/billing/check_payment_status \
-  -H "X-API-Key: rct_a1b2c3d4..." \
-  -H "Content-Type: application/json" \
-  -d '{"payment_id": "5678901234"}'
-```
-
-**How crypto billing works:**
-1. Agent calls `POST /billing/buy_credits_crypto` with credits + preferred coin
-2. Server quotes exact crypto amount at current USD rate (via NOWPayments)
-3. Agent sends crypto to the returned address within ~20 min
-4. NOWPayments confirms payment via IPN webhook (`POST /billing/crypto_webhook`)
-5. Credits auto-granted to the agent's account
-6. Agent can also poll `POST /billing/check_payment_status` to check manually
-
-**Supported coins:** BTC, ETH, SOL, USDC, USDT, DOGE, LTC, XMR, MATIC, AVAX, ADA, DOT, LINK, UNI, SHIB, and 280+ more.
-
 ---
 
-## Pricing Transparency
+## MCP Protocol Support
 
-The `GET /pricing` endpoint is public (no auth required) and returns all pricing information agents need to make purchasing decisions:
+Works with Claude Desktop, Cursor, and any MCP-compatible client:
 
-```bash
-curl https://your-server.com/pricing
-```
-
-Response includes:
-- **Credit packs** -- all available packs with prices and per-credit cost
-- **Subscription plans** -- free/basic/pro with credits per month
-- **Tool costs** -- which tools cost credits and which are free
-- **Tax note** -- information about applicable taxes
-
-Agents can also discover pricing through enriched `402` responses, which include `pricing_url`, `buy_credits_url`, `buy_credits_crypto_url`, `subscribe_url`, and `cheapest_option` fields.
-
----
-
-## Legal Compliance
-
-Two public endpoints provide legal documentation:
-
-### Terms of Service
-
-```bash
-curl https://your-server.com/legal/terms
-```
-
-Returns a 10-section Terms of Service covering service description, billing, acceptable use, data handling, accuracy disclaimers, payment processing, liability, and modification policy.
-
-### Privacy Policy
-
-```bash
-curl https://your-server.com/legal/privacy
-```
-
-Returns a 9-section Privacy Policy covering data collected, how data is used, third-party sharing (Anthropic, Stripe, NOWPayments), data retention periods, user rights (including GDPR), security measures, and cookie policy.
-
-### Tax & Invoice Support
-
-- **Automatic invoices** -- Stripe generates invoices for every credit pack purchase
-- **Automatic tax** -- Enable `STRIPE_TAX_ENABLED=true` for Stripe Tax to auto-calculate VAT/sales tax
-- **Billing address collection** -- Enable `STRIPE_COLLECT_ADDRESS=true` to collect billing addresses and tax IDs for B2B reverse-charge
-
----
-
-## Admin Revenue Dashboard
-
-The `GET /admin/revenue` endpoint gives the server owner a full business overview. Protected by the `X-Admin-Key` header (matched against `ADMIN_KEY` env var).
-
-```bash
-curl https://your-server.com/admin/revenue \
-  -H "X-Admin-Key: your-secret-admin-key"
-```
-
-Returns:
-- **Summary** -- total agents, agents by plan (free/basic/pro), total credits granted vs. spent vs. in circulation
-- **Revenue by source** -- breakdown of credits from Stripe packs, subscriptions, crypto payments, and free signups
-- **Crypto payment stats** -- count and USD total by payment status (waiting, confirmed, finished, etc.)
-- **Recent purchases** -- last 20 paid credit additions with agent name, credits, reason, and date
-- **Top agents** -- top 20 agents ranked by credit usage, with plan and registration date
-- **Daily volume** -- receipts processed per day for the last 30 days
-
----
-
-## Async Processing (Celery + Redis)
-
-For high-throughput agents that don't want to block on each receipt:
-
-```bash
-# Queue async processing
-curl -X POST https://your-server.com/tools/process_receipt_async \
-  -H "X-API-Key: rct_a1b2c3d4..." \
-  -H "Content-Type: application/json" \
-  -d '{"receipt_id": "a1b2c3d4e5f67890"}'
-```
-
-Response:
-```json
-{"receipt_id": "a1b2c3d4e5f67890", "task_id": "abc123...", "status": "queued"}
-```
-
-Poll for completion:
-```bash
-curl https://your-server.com/tasks/abc123... \
-  -H "X-API-Key: rct_a1b2c3d4..."
-```
-
-Or subscribe to the `processing_complete` webhook to be notified automatically.
-
-### Running the Celery worker
-
-```bash
-export REDIS_URL=redis://localhost:6379/0
-celery -A tasks.celery_app worker --loglevel=info
-```
-
----
-
-## Webhook Events
-
-Subscribe via `POST /subscribe_webhook`:
-
-| Event | Payload | When |
-|---|---|---|
-| `low_balance` | `{credits_remaining, buy_credits_url}` | Credits drop below 5 |
-| `processing_complete` | `{receipt_id, status, error?}` | Async processing finishes |
-
-Webhooks are delivered asynchronously and don't block API responses.
-
----
-
-## Framework Integration Quickstarts
-
-`GET /integrations` returns copy-paste snippets for:
-
-- **LangGraph** -- Use as a tool node
-- **CrewAI** -- Use as a `BaseTool` subclass
-- **AutoGen** -- Register as a function
-- **Raw Python** -- Full flow with httpx
-
----
-
-## MCP Endpoint Details
-
-`GET /mcp` returns a JSON array with 8 tools. Each tool includes:
-
-| Field | Description |
-|---|---|
-| `name` | Tool identifier |
-| `description` | Natural-language description optimized for LLM understanding |
-| `parameters` | Full JSON Schema with types, enums, defaults |
-| `examples` | 1-2 complete input/output pairs |
-| `constraints` | Rate limits, auth, cost, latency, `setup_required` |
-
-### Available tools
-
-| Tool | Cost | Description |
-|---|---|---|
-| `upload_receipt` | Free | Upload receipt image/PDF via file or URL |
-| `process_receipt` | 1 credit | Extract structured data with Claude Vision |
-| `upload_and_process` | 1 credit | Upload + process in one call (idempotent) |
-| `get_receipt_markdown` | Free | Render processed receipt as Markdown |
-| `suggest_gl_account` | 1 credit | AI-suggest GL account code |
-| `check_balance` | Free | Check credits and plan |
-| `list_receipts` | Free | List receipts with status filter |
-| `buy_credits_crypto` | Free | Purchase credits with 300+ cryptocurrencies |
-
-All tools include `"setup_required": "register_agent"` in constraints. The `buy_credits_crypto` tool includes `crypto_any_supported: true`, `dynamic_fiat_lock: true`, and `expiry_minutes: "15-20"`.
-
----
-
-## Backend Choice Rationale (March 2026)
-
-### Recommended: Claude Haiku 4.5 Vision API
-
-| Metric | Value |
-|---|---|
-| Accuracy | 88-95% across receipt types |
-| Latency | 1-5 seconds per receipt |
-| Upfront cost | $0 |
-| Setup time | Minutes |
-
-**Why Haiku 4.5:** Excellent accuracy for receipt OCR at the best cost/quality ratio. Switch to Sonnet 4.6 in `tools.py` if you need higher accuracy for complex receipts.
-
-### Alternative: Fully Local with Ollama
-
-| Metric | Value |
-|---|---|
-| Models | Qwen2.5-VL-72B or Llama 3.2 Vision 90B (quantized) |
-| Accuracy | 80-92% |
-| Latency | 8-60 seconds per receipt |
-| Upfront cost | $2,000-3,000 (RTX 4090 + PC) |
-| Ongoing cost | ~$30-60/mo electricity |
-| Privacy | 100% on-premises |
-
-**When to switch:** Once profitable and processing volume justifies the fixed cost.
-
----
-
-## How Agents Find This Tool
-
-There are **5 discovery layers**, from native MCP protocol to HTTP fallback:
-
-### 1. MCP Protocol (stdio) -- Claude Desktop, Cursor, VS Code
-
-The server speaks the **official MCP protocol** via `mcp_server.py`. Add it to your MCP client:
-
-**Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
-```json
-{
-  "mcpServers": {
-    "receipt-accounting": {
-      "command": "python",
-      "args": ["/path/to/Receipt-Accounting-Entry-MCP-Server/mcp_server.py"],
-      "env": {
-        "ANTHROPIC_API_KEY": "sk-ant-your-key-here"
-      }
-    }
-  }
-}
-```
-
-**Cursor** (`.cursor/mcp.json` in your project):
 ```json
 {
   "mcpServers": {
@@ -615,85 +159,35 @@ The server speaks the **official MCP protocol** via `mcp_server.py`. Add it to y
 }
 ```
 
-Once configured, the agent can call `upload_receipt`, `process_receipt`, `suggest_gl_account`, etc. directly through the MCP protocol. No HTTP needed.
-
-### 2. Well-Known Discovery
-
-Any MCP-aware agent can hit `/.well-known/mcp.json` on your domain to discover the server:
-
-```bash
-curl https://your-server.com/.well-known/mcp.json
-```
-
-Returns server name, description, available transports (stdio + HTTP), registration URL, and tool count. This is the emerging standard for domain-level MCP discovery.
-
-### 3. MCP Registries (Smithery, Composio, Glama)
-
-The repo includes a `smithery.yaml` for listing on [Smithery.ai](https://smithery.ai) -- the largest MCP server registry. Agents and developers search Smithery to find MCP tools.
-
-**To list on registries:**
-- **Smithery:** Submit the repo URL at smithery.ai/submit (config in `smithery.yaml`)
-- **Composio:** Submit at composio.dev
-- **Glama:** Submit at glama.ai/mcp/servers
-
-Once listed, any agent querying these registries for "receipt", "expense", "accounting", or "OCR" will find this tool.
-
-### 4. HTTP Discovery Endpoint
-
-For agents that speak HTTP but not MCP protocol:
-
-```bash
-curl https://your-server.com/mcp
-```
-
-Returns a JSON array with all 8 tools, full JSON schemas, examples, and constraints. This is the fallback for custom agent frameworks.
-
-### 5. Framework Integrations
-
-Ready-to-use examples in the `examples/` directory:
-
-| Framework | File | What it does |
-|---|---|---|
-| **LangGraph** | `examples/langgraph_agent.py` | LangChain tools for StateGraph |
-| **CrewAI** | `examples/crewai_tool.py` | BaseTool subclasses |
-| **Raw Python** | `examples/quick_start.py` | 10-line end-to-end example |
-
-The `/integrations` endpoint also returns copy-paste snippets for LangGraph, CrewAI, AutoGen, and raw Python.
-
-### Discovery Summary
-
-```
-                    Agent needs receipt parsing
-                              |
-              ┌───────────────┼───────────────┐
-              v               v               v
-      MCP Registry      Domain Probe     Developer Config
-    (Smithery, etc.)  (/.well-known/)   (claude_desktop_config)
-              |               |               |
-              v               v               v
-         smithery.yaml    mcp.json       mcp_server.py
-              |               |               |
-              └───────┬───────┘               |
-                      v                       v
-               HTTP API (/mcp)         MCP stdio protocol
-              (tool catalogue)        (JSON-RPC over stdio)
-                      |                       |
-                      v                       v
-               POST /tools/*           Direct tool calls
-            (FastAPI endpoints)     (via MCP SDK transport)
-```
+Also discoverable via `/.well-known/mcp.json` and listed on [Smithery.ai](https://smithery.ai).
 
 ---
 
-## Project Status
+## Framework Examples
 
-| Phase | Status | Description |
-|---|---|---|
-| Phase 1 | Complete | Core tools + Claude Haiku 4.5 vision + MCP endpoint |
-| Phase 2 | Complete | Stripe credits, subscriptions, agent registration, webhooks, async processing |
-| Phase 3 | Complete | Crypto payments (300+ coins) with dynamic fiat-lock quoting via NOWPayments |
-| Phase 3.1 | Complete | Performance audit: atomic credits, connection pooling, async webhooks, combo endpoints, idempotency |
-| Phase 3.2 | **Current** | Pricing transparency, legal compliance (ToS + Privacy), admin revenue dashboard, invoice/tax support, Kelnix branding |
+`GET /integrations` returns ready-to-use code for:
+
+- **LangGraph** — tool node integration
+- **CrewAI** — BaseTool subclass
+- **AutoGen** — registered function
+- **Raw Python** — full flow with httpx
+
+See `examples/` directory for complete implementations.
+
+---
+
+## Crypto Payments
+
+Pay with BTC, ETH, SOL, USDC, USDT, DOGE, and 280+ more. Credits priced in USD, crypto amount locked at current rate for ~20 minutes.
+
+```bash
+curl -X POST https://receipt-mcp-api.kelnix.org/billing/buy_credits_crypto \
+  -H "X-API-Key: rct_your-key-here" \
+  -H "Content-Type: application/json" \
+  -d '{"credits": 1000, "preferred_coin": "btc"}'
+```
+
+Returns payment address and exact amount. Credits granted automatically on confirmation.
 
 ---
 
@@ -708,40 +202,6 @@ uvicorn app:app --host 0.0.0.0 --port 8000
 ```
 
 Requires Python 3.11+. See `deploy/setup.sh` for production deployment with nginx, SSL, and systemd.
-
-| Variable | Required | Description |
-|---|---|---|
-| `ANTHROPIC_API_KEY` | Yes | Anthropic API key for Claude vision |
-| `STRIPE_SECRET_KEY` | No | Stripe secret key for billing |
-| `STRIPE_WEBHOOK_SECRET` | No | Stripe webhook signing secret |
-| `NOWPAYMENTS_API_KEY` | No | NOWPayments API key for crypto |
-| `REDIS_URL` | No | Redis URL for async processing |
-
----
-
-## File Structure
-
-```
-├── app.py                  # FastAPI application, routes, auth
-├── mcp_server.py           # MCP protocol server (stdio/SSE)
-├── tools.py                # Core tool logic + MCP descriptors
-├── billing.py              # Stripe + crypto billing
-├── crypto_gateway.py       # NOWPayments integration
-├── db.py                   # SQLite (WAL, connection pool)
-├── models.py               # Pydantic schemas
-├── tasks.py                # Celery async tasks
-├── webhooks.py             # Async webhook dispatch
-├── test_all.py             # 152-test e2e suite
-├── deploy/
-│   ├── setup.sh            # VPS deploy (nginx, SSL, systemd)
-│   └── update.sh           # Pull & restart
-├── examples/
-│   ├── quick_start.py      # 10-line quickstart
-│   ├── langgraph_agent.py  # LangGraph integration
-│   └── crewai_tool.py      # CrewAI integration
-├── smithery.yaml           # Smithery registry config
-└── mcp_config_example.json # Claude Desktop config
-```
 
 ---
 
