@@ -56,6 +56,7 @@ def _ensure_init():
 # ── MCP Tools ──────────────────────────────────────────────────────────
 
 @mcp.tool(
+    name="receipts.upload",
     annotations=ToolAnnotations(
         title="Upload Receipt",
         readOnlyHint=False,
@@ -95,6 +96,7 @@ async def upload_receipt(
 
 
 @mcp.tool(
+    name="receipts.process",
     annotations=ToolAnnotations(
         title="Process Receipt",
         readOnlyHint=False,
@@ -139,6 +141,7 @@ async def process_receipt(
 
 
 @mcp.tool(
+    name="receipts.upload_and_process",
     annotations=ToolAnnotations(
         title="Upload & Process Receipt",
         readOnlyHint=False,
@@ -196,6 +199,7 @@ async def upload_and_process(
 
 
 @mcp.tool(
+    name="receipts.get_markdown",
     annotations=ToolAnnotations(
         title="Get Receipt Markdown",
         readOnlyHint=True,
@@ -223,6 +227,7 @@ async def get_receipt_markdown(
 
 
 @mcp.tool(
+    name="accounting.suggest_gl_account",
     annotations=ToolAnnotations(
         title="Suggest GL Account",
         readOnlyHint=True,
@@ -257,6 +262,7 @@ async def suggest_gl_account(
 
 
 @mcp.tool(
+    name="credits.check_balance",
     annotations=ToolAnnotations(
         title="Check Balance",
         readOnlyHint=True,
@@ -295,6 +301,7 @@ async def check_balance(
 
 
 @mcp.tool(
+    name="receipts.list",
     annotations=ToolAnnotations(
         title="List Receipts",
         readOnlyHint=True,
