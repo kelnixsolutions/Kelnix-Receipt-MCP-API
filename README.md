@@ -807,6 +807,9 @@ The server starts at `http://localhost:8000`.
 ├── test_all.py            # 152-test end-to-end test suite
 ├── smithery.yaml          # Smithery.ai MCP registry configuration
 ├── mcp_config_example.json # Claude Desktop / Cursor config example
+├── deploy/
+│   ├── setup.sh           # One-command Hetzner/VPS deploy (nginx, SSL, systemd)
+│   └── update.sh          # Pull latest code and restart server
 ├── examples/
 │   ├── quick_start.py     # 10-line end-to-end example
 │   ├── langgraph_agent.py # LangGraph tool integration

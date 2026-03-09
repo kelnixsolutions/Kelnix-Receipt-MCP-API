@@ -6,27 +6,64 @@ Step-by-step instructions for making this tool discoverable by AI agents and dev
 
 ## Phase 1: Deploy the Server (do first)
 
-### 1.1 Choose a hosting provider
+### 1.1 Deploy to Hetzner (recommended — $4.50/mo, fixed price, scalable)
 
-Pick one and deploy:
+**Step 1: Create a Hetzner server**
+1. Go to [console.hetzner.cloud](https://console.hetzner.cloud)
+2. Click "Add Server"
+3. Choose: **Location** → Falkenstein (cheapest) or Ashburn (US users)
+4. Choose: **Image** → Ubuntu 24.04
+5. Choose: **Type** → CX22 (2 vCPU, 4GB RAM — $4.50/mo)
+6. Add your SSH key (or set a root password)
+7. Click "Create & Buy Now"
+8. Note the IP address
 
-- **Railway** (easiest): `railway init` then `railway up`
-- **Fly.io**: `fly launch` then `fly deploy`
-- **Render**: Connect GitHub repo, set build command `pip install -r requirements.txt`, start command `uvicorn app:app --host 0.0.0.0 --port $PORT`
-- **AWS/GCP/Azure**: Docker or direct deploy
+**Step 2: Point your domain**
+Add a DNS A record: `api.kelnix.org` → your server IP
+
+**Step 3: Run the deploy script**
+```bash
+ssh root@YOUR-SERVER-IP
+apt-get install -y git
+git clone https://github.com/TiagoX9/Receipt-Accounting-Entry-MCP-Server.git /opt/receipt-mcp
+DOMAIN=api.kelnix.org bash /opt/receipt-mcp/deploy/setup.sh
+```
+
+**Step 4: Add your keys**
+```bash
+nano /opt/receipt-mcp/.env
+# Add your ANTHROPIC_API_KEY, STRIPE keys, ADMIN_KEY, etc.
+```
+
+**Step 5: Start and get SSL**
+```bash
+systemctl start receipt-mcp
+certbot --nginx -d api.kelnix.org
+```
+
+The deploy script handles everything: Python, venv, nginx, systemd, firewall, log directories.
+
+**Other hosting options:**
+- **Railway** (easiest, usage-based): `railway init` then `railway up`
+- **Render** (free tier): Connect GitHub repo, start command `uvicorn app:app --host 0.0.0.0 --port $PORT`
+- **Fly.io** (edge): `fly launch` then `fly deploy`
 
 ### 1.2 Set environment variables on your host
 
 ```
 ANTHROPIC_API_KEY=sk-ant-...          # REQUIRED - get from console.anthropic.com
-STRIPE_SECRET_KEY=sk_live_...         # Optional - for fiat billing
-STRIPE_WEBHOOK_SECRET=whsec_...       # Optional - for Stripe webhooks
-STRIPE_BASIC_PRICE_ID=price_...       # Optional - create in Stripe Dashboard
-STRIPE_PRO_PRICE_ID=price_...         # Optional - create in Stripe Dashboard
+STRIPE_SECRET_KEY=sk_live_...         # Required for payments
+STRIPE_WEBHOOK_SECRET=whsec_...       # Required for Stripe webhooks
+STRIPE_BASIC_PRICE_ID=price_...       # Create in Stripe Dashboard
+STRIPE_PRO_PRICE_ID=price_...         # Create in Stripe Dashboard
+ADMIN_KEY=your-secret-admin-key       # Protects /admin/revenue
 NOWPAYMENTS_API_KEY=...               # Optional - for crypto billing
 NOWPAYMENTS_IPN_SECRET=...            # Optional - for crypto webhooks
 CRYPTO_IPN_CALLBACK_URL=https://YOUR-DOMAIN.com/billing/crypto_webhook
-REDIS_URL=redis://...                 # Optional - for async processing
+STRIPE_TAX_ENABLED=true               # Optional - auto tax calculation
+STRIPE_COLLECT_ADDRESS=true            # Optional - collect billing address
+SUPPORT_EMAIL=info@kelnix.org          # Contact email in legal pages
+REDIS_URL=redis://...                  # Optional - for async processing
 ```
 
 ### 1.3 Verify deployment
@@ -34,14 +71,28 @@ REDIS_URL=redis://...                 # Optional - for async processing
 ```bash
 # Replace with your actual domain
 curl https://YOUR-DOMAIN.com/health
-# Should return: {"status":"ok","version":"3.1.0"}
+# Should return: {"status":"ok","version":"3.2.0"}
 
 curl https://YOUR-DOMAIN.com/.well-known/mcp.json
 # Should return MCP discovery metadata
 
 curl https://YOUR-DOMAIN.com/mcp
 # Should return 8 tools
+
+curl https://YOUR-DOMAIN.com/pricing
+# Should return pricing info
+
+curl https://YOUR-DOMAIN.com/legal/terms
+# Should return Terms of Service
 ```
+
+### 1.4 Updating the server
+
+After pushing new code to GitHub:
+```bash
+sudo bash /opt/receipt-mcp/deploy/update.sh
+```
+This pulls the latest code, updates dependencies, and restarts the server.
 
 ---
 
