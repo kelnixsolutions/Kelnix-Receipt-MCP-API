@@ -19,14 +19,14 @@ Step-by-step instructions for making this tool discoverable by AI agents and dev
 8. Note the IP address
 
 **Step 2: Point your domain**
-Add a DNS A record: `api.kelnix.org` → your server IP
+Add a DNS A record: `receipt-mcp-api.kelnix.org` → your server IP
 
 **Step 3: Run the deploy script**
 ```bash
 ssh root@YOUR-SERVER-IP
 apt-get install -y git
 git clone https://github.com/TiagoX9/Receipt-Accounting-Entry-MCP-Server.git /opt/receipt-mcp
-DOMAIN=api.kelnix.org bash /opt/receipt-mcp/deploy/setup.sh
+DOMAIN=receipt-mcp-api.kelnix.org bash /opt/receipt-mcp/deploy/setup.sh
 ```
 
 **Step 4: Add your keys**
@@ -38,7 +38,7 @@ nano /opt/receipt-mcp/.env
 **Step 5: Start and get SSL**
 ```bash
 systemctl start receipt-mcp
-certbot --nginx -d api.kelnix.org
+certbot --nginx -d receipt-mcp-api.kelnix.org
 ```
 
 The deploy script handles everything: Python, venv, nginx, systemd, firewall, log directories.

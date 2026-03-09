@@ -130,7 +130,7 @@ echo "[7/7] Configuring nginx..."
 # Prompt for domain if not set
 if [ -z "$DOMAIN" ]; then
     echo ""
-    read -rp "  Enter your domain (e.g. api.kelnix.org): " DOMAIN
+    read -rp "  Enter your domain (e.g. receipt-mcp-api.kelnix.org): " DOMAIN
 fi
 
 cat > /etc/nginx/sites-available/receipt-mcp <<EOF
