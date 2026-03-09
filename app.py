@@ -120,6 +120,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# ── Mount MCP protocol (SSE) for Smithery and MCP clients ─────────────
+
+from mcp_server import mcp as _mcp_server
+
+app.mount("/sse", _mcp_server.sse_app())
+
 
 # ── Request ID middleware ────────────────────────────────────────────────
 
