@@ -81,13 +81,13 @@ curl -X POST https://receipt-mcp-api.kelnix.org/billing/buy_credits_crypto \
 
 | Tool | Cost |
 |------|------|
-| `process_receipt` | 1 credit |
-| `upload_and_process` | 1 credit |
-| `suggest_gl_account` | 1 credit |
-| `upload_receipt` | 🆓 Free |
-| `get_receipt_markdown` | 🆓 Free |
-| `check_balance` | 🆓 Free |
-| `list_receipts` | 🆓 Free |
+| `receipts.process` | 1 credit |
+| `receipts.upload_and_process` | 1 credit |
+| `accounting.suggest_gl_account` | 1 credit |
+| `receipts.upload` | 🆓 Free |
+| `receipts.get_markdown` | 🆓 Free |
+| `credits.check_balance` | 🆓 Free |
+| `receipts.list` | 🆓 Free |
 
 Full pricing also available at [`GET /pricing`](https://receipt-mcp-api.kelnix.org/pricing) (no auth required).
 
