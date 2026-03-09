@@ -1,4 +1,8 @@
-# 🧾 Kelnix Receipt MCP API
+<p align="center">
+  <img src="kelnix-logo.png" alt="Kelnix" width="120">
+</p>
+
+<h1 align="center">🧾 Kelnix Receipt MCP API</h1>
 
 > Turn receipt images and PDFs into structured, accounting-ready JSON. One API call.
 
