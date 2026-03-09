@@ -35,6 +35,7 @@ mcp = FastMCP(
         "codes for instant bookkeeping. Built for expense automation agents. "
         "50 free credits on signup, no credit card required."
     ),
+    website_url="https://kelnix.org",
 )
 
 # ── Lazy-init our backend ──────────────────────────────────────────────
@@ -231,7 +232,7 @@ async def get_receipt_markdown(
     ),
 )
 async def suggest_gl_account(
-    expense_json: Annotated[dict, Field(
+    expense_json: Annotated[dict[str, Any], Field(
         description="The structured_expense object returned by process_receipt. Contains merchant, amount, category, and line items.",
     )],
     chart_of_accounts_snippet: Annotated[str | None, Field(
