@@ -323,6 +323,49 @@ async def list_receipts(
     return {"receipts": rows}
 
 
+# ── Prompts (MCP protocol) ─────────────────────────────────────────────
+
+@mcp.prompt()
+def process_expense(
+    receipt_source: Annotated[str, Field(
+        description="URL or file path of the receipt to process",
+    )],
+    company: Annotated[str, Field(
+        description="Company name or industry for better categorisation",
+    )] = "general business",
+) -> str:
+    """Step-by-step guide to process a receipt and get structured expense data."""
+    return (
+        f"I need to process an expense receipt.\n\n"
+        f"Receipt: {receipt_source}\n"
+        f"Company context: {company}\n\n"
+        f"Please:\n"
+        f"1. Upload the receipt using upload_and_process (mime_type based on file extension)\n"
+        f"2. Review the extracted data — verify merchant, date, total, and line items\n"
+        f"3. If the receipt is already uploaded, use its receipt_id with process_receipt\n"
+        f"4. Show me the results in a clear summary\n"
+        f"5. Suggest a GL account code using suggest_gl_account"
+    )
+
+
+@mcp.prompt()
+def expense_report(
+    time_period: Annotated[str, Field(
+        description="Time period for the report (e.g. 'March 2026', 'Q1 2026', 'last week')",
+    )],
+) -> str:
+    """Generate an expense report from processed receipts."""
+    return (
+        f"Generate an expense report for: {time_period}\n\n"
+        f"Please:\n"
+        f"1. Use list_receipts to find all processed receipts\n"
+        f"2. For each processed receipt, use get_receipt_markdown to get details\n"
+        f"3. Group expenses by category (meals, travel, software, etc.)\n"
+        f"4. Calculate totals per category and grand total\n"
+        f"5. Present as a clean Markdown expense report with a summary table"
+    )
+
+
 # ── Resources (MCP protocol) ──────────────────────────────────────────
 
 @mcp.resource("receipt://pricing")

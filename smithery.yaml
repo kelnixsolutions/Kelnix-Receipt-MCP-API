@@ -1,26 +1,26 @@
 # Smithery.ai MCP server configuration
-# Submit at: https://smithery.ai/submit
-# Docs: https://smithery.ai/docs/config
+# https://smithery.ai/docs/config
 
 startCommand:
   type: stdio
   configSchema:
     type: object
     properties:
-      anthropicApiKey:
-        type: string
-        description: "Anthropic API key for Claude vision (required for processing)"
       receiptMcpApiKey:
         type: string
-        description: "Your Receipt MCP API key (from /register_agent). Optional for local use."
-    required:
-      - anthropicApiKey
+        title: "Kelnix API Key"
+        description: "Your Kelnix Receipt MCP API key. Register free at https://receipt-mcp-api.kelnix.org/docs — 50 credits included, no card required."
+      anthropicApiKey:
+        type: string
+        title: "Anthropic API Key"
+        description: "Anthropic API key for Claude AI vision. Only required if self-hosting the server."
+    required: []
   commandFunction: |-
     (config) => ({
       command: "python",
       args: ["mcp_server.py"],
       env: {
-        ANTHROPIC_API_KEY: config.anthropicApiKey,
         RECEIPT_MCP_API_KEY: config.receiptMcpApiKey || "",
+        ANTHROPIC_API_KEY: config.anthropicApiKey || ""
       }
     })

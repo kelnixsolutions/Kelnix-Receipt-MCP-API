@@ -15,7 +15,7 @@ from fastapi import (
     Request,
     UploadFile,
 )
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 import billing
 import db
@@ -217,6 +217,7 @@ async def mcp_server_card():
             "50 free credits on signup. Accepts cards and 300+ cryptocurrencies."
         ),
         "homepage": "https://kelnix.org",
+        "icon": "https://receipt-mcp-api.kelnix.org/icon.png",
         "repository": "https://github.com/kelnixsolutions/Kelnix-Receipt-MCP-API",
         "version": "3.3.0",
         "tools": [
@@ -231,6 +232,17 @@ async def mcp_server_card():
         ],
         "contact": "info@kelnix.org",
     })
+
+
+# ── Server icon ──────────────────────────────────────────────────────────
+
+@app.get("/icon.png", tags=["System"])
+async def server_icon():
+    """Server icon for registry listings."""
+    icon_path = os.path.join(os.path.dirname(__file__), "Kelnix Receipt MCP.png")
+    if os.path.exists(icon_path):
+        return FileResponse(icon_path, media_type="image/png")
+    raise HTTPException(status_code=404, detail="Icon not found")
 
 
 # ── Public pricing (no auth) ────────────────────────────────────────────
