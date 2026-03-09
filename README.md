@@ -202,7 +202,7 @@ Returns payment address and exact amount. Credits granted automatically on confi
 ## 🛠️ Self-Hosting
 
 ```bash
-git clone https://github.com/TiagoX9/Receipt-Accounting-Entry-MCP-Server.git
+git clone https://github.com/kelnixsolutions/Kelnix-Receipt-MCP-API.git
 cd Receipt-Accounting-Entry-MCP-Server
 pip install -r requirements.txt
 export ANTHROPIC_API_KEY=sk-ant-...
