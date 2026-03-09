@@ -265,7 +265,12 @@ async def suggest_gl_account(
         openWorldHint=False,
     ),
 )
-async def check_balance() -> dict[str, Any]:
+async def check_balance(
+    include_history: Annotated[bool, Field(
+        description="Set to true to include recent transaction history (last 10 credit changes) in the response.",
+        default=False,
+    )] = False,
+) -> dict[str, Any]:
     """Check your current credit balance and subscription plan.
 
     Returns your remaining credits and active plan (free, basic, or pro).
@@ -283,7 +288,10 @@ async def check_balance() -> dict[str, Any]:
     agent = db.get_agent_by_api_key(api_key)
     plan = agent["plan"] if agent else "free"
     balance = db.get_credit_balance(api_key)
-    return {"credits": balance, "plan": plan}
+    result: dict[str, Any] = {"credits": balance, "plan": plan}
+    if include_history:
+        result["history"] = db.get_credit_history(api_key)[:10]
+    return result
 
 
 @mcp.tool(
