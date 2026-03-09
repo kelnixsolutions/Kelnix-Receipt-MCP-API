@@ -154,7 +154,7 @@ async def well_known_mcp():
                 "8 tools: upload, process, extract, categorize, GL account suggestion. "
                 "Supports 300+ crypto payments. 50 free credits on signup."
             ),
-            "version": "3.1.0",
+            "version": "3.2.0",
             "transport": [
                 {
                     "type": "http",
@@ -176,8 +176,35 @@ async def well_known_mcp():
                 "description": "Self-service. Returns API key instantly.",
             },
             "documentation": "/docs",
-            "source": "https://github.com/TiagoX9/Receipt-Accounting-Entry-MCP-Server",
+            "source": "https://github.com/kelnixsolutions/Kelnix-Receipt-MCP-API",
         },
+    })
+
+
+@app.get("/.well-known/mcp/server-card.json", tags=["MCP"])
+async def mcp_server_card():
+    """Smithery-compatible MCP server card for registry discovery."""
+    return JSONResponse(content={
+        "name": "Kelnix Receipt MCP API",
+        "description": (
+            "Turn receipt images and PDFs into structured, accounting-ready JSON. "
+            "8 tools for upload, processing, GL account suggestion, and more. "
+            "50 free credits on signup. Accepts Stripe and 300+ cryptocurrencies."
+        ),
+        "homepage": "https://kelnix.org",
+        "repository": "https://github.com/kelnixsolutions/Kelnix-Receipt-MCP-API",
+        "version": "3.2.0",
+        "tools": [
+            {"name": "upload_receipt", "description": "Upload receipt image/PDF"},
+            {"name": "process_receipt", "description": "Extract structured data with AI vision"},
+            {"name": "upload_and_process", "description": "Upload + process in one call"},
+            {"name": "get_receipt_markdown", "description": "Get processed receipt as Markdown"},
+            {"name": "suggest_gl_account", "description": "AI-suggest GL account code"},
+            {"name": "check_balance", "description": "Check credits and plan"},
+            {"name": "list_receipts", "description": "List receipts with filters"},
+            {"name": "buy_credits_crypto", "description": "Buy credits with 300+ cryptocurrencies"},
+        ],
+        "contact": "info@kelnix.org",
     })
 
 
