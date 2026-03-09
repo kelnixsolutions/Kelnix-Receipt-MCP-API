@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="kelnix-logo.png" alt="Kelnix" width="120">
+  <img src="Kelnix Receipt MCP.png" alt="Kelnix Receipt MCP" width="120">
 </p>
 
 <h1 align="center">🧾 Kelnix Receipt MCP API</h1>
