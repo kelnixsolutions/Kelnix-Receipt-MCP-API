@@ -110,7 +110,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Receipt Accounting Entry MCP Server",
+    title="Kelnix Receipt MCP API",
     version="3.1.0",
     description=(
         "Agent-native MCP server that converts receipt images/PDFs into "
@@ -148,7 +148,7 @@ async def well_known_mcp():
     return JSONResponse(content={
         "mcp_version": "1.0",
         "server": {
-            "name": "Receipt Accounting Entry",
+            "name": "Kelnix Receipt MCP API",
             "description": (
                 "Convert receipt images and PDFs into structured, accounting-ready JSON. "
                 "8 tools: upload, process, extract, categorize, GL account suggestion. "
@@ -220,10 +220,10 @@ async def pricing():
 
 @app.get("/legal/terms", tags=["Legal"])
 async def terms_of_service():
-    """Terms of Service for the Receipt MCP Server API."""
+    """Terms of Service for the Kelnix Receipt MCP API."""
     terms_url = os.environ.get("TERMS_URL", "")
     return JSONResponse(content={
-        "service": "Receipt Accounting Entry MCP Server by Kelnix",
+        "service": "Kelnix Receipt MCP API",
         "effective_date": "2026-03-06",
         "terms": {
             "1_acceptance": (
@@ -281,10 +281,10 @@ async def terms_of_service():
 
 @app.get("/legal/privacy", tags=["Legal"])
 async def privacy_policy():
-    """Privacy Policy for the Receipt MCP Server API."""
+    """Privacy Policy for the Kelnix Receipt MCP API."""
     privacy_url = os.environ.get("PRIVACY_URL", "")
     return JSONResponse(content={
-        "service": "Receipt Accounting Entry MCP Server by Kelnix",
+        "service": "Kelnix Receipt MCP API",
         "effective_date": "2026-03-06",
         "policy": {
             "1_data_collected": {

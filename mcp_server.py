@@ -25,7 +25,7 @@ from mcp.server.fastmcp import FastMCP
 # ── Initialize MCP server ──────────────────────────────────────────────
 
 mcp = FastMCP(
-    "Receipt Accounting Entry",
+    "Kelnix Receipt MCP API",
     instructions=(
         "Convert receipt images and PDFs into structured, accounting-ready JSON. "
         "Upload receipts, extract expense data with AI vision, suggest GL accounts, "
