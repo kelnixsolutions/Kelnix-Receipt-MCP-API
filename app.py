@@ -123,11 +123,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Kelnix Receipt MCP API",
-    version="3.2.0",
+    version="3.3.0",
     description=(
-        "Agent-native MCP server that converts receipt images/PDFs into "
-        "structured accounting-ready JSON. Discover tools at /mcp. "
-        "50 free credits on signup. Stripe + crypto payments."
+        "Turn any receipt into structured, accounting-ready JSON with one API call. "
+        "AI vision extracts merchant, date, line items, tax, totals, and suggests GL accounts. "
+        "Built for expense automation agents. 50 free credits, no card required."
     ),
     lifespan=lifespan,
 )
@@ -173,11 +173,12 @@ async def well_known_mcp():
         "server": {
             "name": "Kelnix Receipt MCP API",
             "description": (
-                "Convert receipt images and PDFs into structured, accounting-ready JSON. "
-                "8 tools: upload, process, extract, categorize, GL account suggestion. "
-                "Supports 300+ crypto payments. 50 free credits on signup."
+                "Turn any receipt into structured JSON with one API call. "
+                "AI vision extracts merchant, date, line items, tax, totals, and suggests GL accounts. "
+                "7 tools for upload, processing, markdown export, and balance management. "
+                "50 free credits on signup. Accepts cards and 300+ cryptocurrencies."
             ),
-            "version": "3.2.0",
+            "version": "3.3.0",
             "transport": [
                 {
                     "type": "http",
@@ -210,13 +211,14 @@ async def mcp_server_card():
     return JSONResponse(content={
         "name": "Kelnix Receipt MCP API",
         "description": (
-            "Turn receipt images and PDFs into structured, accounting-ready JSON. "
-            "8 tools for upload, processing, GL account suggestion, and more. "
-            "50 free credits on signup. Accepts Stripe and 300+ cryptocurrencies."
+            "Turn any receipt into structured, accounting-ready JSON with one API call. "
+            "AI vision extracts merchant, date, line items, tax, totals, and suggests GL accounts. "
+            "7 tools for the full receipt-to-journal-entry pipeline. "
+            "50 free credits on signup. Accepts cards and 300+ cryptocurrencies."
         ),
         "homepage": "https://kelnix.org",
         "repository": "https://github.com/kelnixsolutions/Kelnix-Receipt-MCP-API",
-        "version": "3.2.0",
+        "version": "3.3.0",
         "tools": [
             {"name": "upload_receipt", "description": "Upload receipt image/PDF"},
             {"name": "process_receipt", "description": "Extract structured data with AI vision"},
@@ -994,4 +996,4 @@ async def admin_revenue(
 
 @app.get("/health", tags=["System"])
 async def health():
-    return {"status": "ok", "version": "3.2.0"}
+    return {"status": "ok", "version": "3.3.0"}

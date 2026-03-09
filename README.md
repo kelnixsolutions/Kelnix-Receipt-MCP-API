@@ -4,9 +4,9 @@
 
 <h1 align="center">🧾 Kelnix Receipt MCP API</h1>
 
-> Turn receipt images and PDFs into structured, accounting-ready JSON. One API call.
+> Turn any receipt into structured, accounting-ready JSON with one API call. AI vision extracts everything — merchant, date, line items, tax, totals — and suggests GL accounts for instant bookkeeping.
 
-Built for AI agents that handle expense management, accounts payable, and bookkeeping. No dashboard, no login — just an API.
+Built for AI agents that automate expense management, accounts payable, and bookkeeping. No dashboard, no login — just an API that speaks MCP.
 
 🎁 **50 free credits on signup. No credit card required.**
 

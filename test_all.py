@@ -51,7 +51,7 @@ def run_tests():
     print("\n--- SYSTEM ---")
     r = client.get("/health")
     test("GET /health returns 200", r.status_code == 200)
-    test("/health has version 3.2.0", r.json().get("version") == "3.2.0", r.json())
+    test("/health has version 3.3.0", r.json().get("version") == "3.3.0", r.json())
 
     # ── 2. MCP Discovery ────────────────────────────────────────────
     print("\n--- MCP DISCOVERY ---")

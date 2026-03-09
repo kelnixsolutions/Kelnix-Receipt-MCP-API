@@ -18,18 +18,22 @@ import base64
 import io
 import json
 import os
-from typing import Any
+from typing import Annotated, Any
 
+from pydantic import Field
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 
 # ── Initialize MCP server ──────────────────────────────────────────────
 
 mcp = FastMCP(
     "Kelnix Receipt MCP API",
     instructions=(
-        "Convert receipt images and PDFs into structured, accounting-ready JSON. "
-        "Upload receipts, extract expense data with AI vision, suggest GL accounts, "
-        "and manage credits. Built for AI agents."
+        "AI-powered receipt processing API. Upload any receipt image or PDF and get "
+        "structured, accounting-ready JSON in seconds — merchant, date, line items, "
+        "totals, tax breakdown, currency, and confidence scores. Suggest GL account "
+        "codes for instant bookkeeping. Built for expense automation agents. "
+        "50 free credits on signup, no credit card required."
     ),
 )
 
@@ -50,22 +54,33 @@ def _ensure_init():
 
 # ── MCP Tools ──────────────────────────────────────────────────────────
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Upload Receipt",
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
+)
 async def upload_receipt(
-    mime_type: str,
-    url: str | None = None,
-    file_base64: str | None = None,
+    mime_type: Annotated[str, Field(
+        description="MIME type of the file. Supported: image/jpeg, image/png, image/webp, image/gif, application/pdf",
+    )],
+    url: Annotated[str | None, Field(
+        description="Public URL of the receipt image or PDF. Provide this OR file_base64, not both.",
+        default=None,
+    )] = None,
+    file_base64: Annotated[str | None, Field(
+        description="Base64-encoded file content. Use this when the receipt file is local rather than hosted at a URL.",
+        default=None,
+    )] = None,
 ) -> dict[str, Any]:
     """Upload a receipt image or PDF for later processing.
 
-    Provide either a public URL or base64-encoded file content.
-    Supports JPEG, PNG, WebP, GIF, and PDF.
-    Returns a receipt_id for use with other tools.
-
-    Args:
-        mime_type: MIME type (image/jpeg, image/png, image/webp, image/gif, application/pdf)
-        url: Public URL of the receipt image or PDF
-        file_base64: Base64-encoded file content (alternative to URL)
+    Accepts JPEG, PNG, WebP, GIF images and PDF documents up to 10 MB.
+    Returns a receipt_id you'll use with process_receipt or get_receipt_markdown.
+    Free — no credits consumed.
     """
     _ensure_init()
     import tools as _tools
@@ -78,23 +93,37 @@ async def upload_receipt(
     return {"receipt_id": result.receipt_id}
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Process Receipt",
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 async def process_receipt(
-    receipt_id: str,
-    company_context: str | None = None,
-    preferred_currency: str | None = None,
-    force_category: str | None = None,
+    receipt_id: Annotated[str, Field(
+        description="The receipt_id returned by upload_receipt. Must be a valid, previously uploaded receipt.",
+    )],
+    company_context: Annotated[str | None, Field(
+        description="Brief description of your company or industry (e.g. 'SaaS startup', 'restaurant chain') for smarter expense categorisation.",
+        default=None,
+    )] = None,
+    preferred_currency: Annotated[str | None, Field(
+        description="ISO 4217 currency code to use for the output (e.g. USD, EUR, GBP). If omitted, the currency is auto-detected from the receipt.",
+        default=None,
+    )] = None,
+    force_category: Annotated[str | None, Field(
+        description="Override the AI-detected category. One of: meals, travel, office_supplies, software, professional_services, utilities, equipment, advertising, insurance, other.",
+        default=None,
+    )] = None,
 ) -> dict[str, Any]:
-    """Process an uploaded receipt using AI vision to extract structured expense data.
+    """Extract structured expense data from an uploaded receipt using AI vision.
 
-    Returns merchant, date, total, currency, line items, taxes, category,
-    confidence scores, and reasoning. Costs 1 credit per call.
-
-    Args:
-        receipt_id: The receipt_id returned by upload_receipt
-        company_context: Brief company description for better categorisation
-        preferred_currency: ISO 4217 currency code (e.g. USD, EUR, GBP)
-        force_category: Override auto-detected category (meals, travel, office_supplies, software, professional_services, utilities, equipment, advertising, insurance, other)
+    Returns merchant name, date, total amount, currency, itemised line items,
+    tax breakdown, expense category, confidence scores, and AI reasoning.
+    Costs 1 credit per call.
     """
     _ensure_init()
     import tools as _tools
@@ -108,26 +137,45 @@ async def process_receipt(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Upload & Process Receipt",
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 async def upload_and_process(
-    mime_type: str,
-    url: str | None = None,
-    file_base64: str | None = None,
-    company_context: str | None = None,
-    preferred_currency: str | None = None,
-    force_category: str | None = None,
+    mime_type: Annotated[str, Field(
+        description="MIME type of the file. Supported: image/jpeg, image/png, image/webp, image/gif, application/pdf",
+    )],
+    url: Annotated[str | None, Field(
+        description="Public URL of the receipt image or PDF. Provide this OR file_base64, not both.",
+        default=None,
+    )] = None,
+    file_base64: Annotated[str | None, Field(
+        description="Base64-encoded file content. Use this when the receipt file is local rather than hosted at a URL.",
+        default=None,
+    )] = None,
+    company_context: Annotated[str | None, Field(
+        description="Brief description of your company or industry for smarter expense categorisation.",
+        default=None,
+    )] = None,
+    preferred_currency: Annotated[str | None, Field(
+        description="ISO 4217 currency code (e.g. USD, EUR, GBP). Auto-detected if omitted.",
+        default=None,
+    )] = None,
+    force_category: Annotated[str | None, Field(
+        description="Override AI-detected category. One of: meals, travel, office_supplies, software, professional_services, utilities, equipment, advertising, insurance, other.",
+        default=None,
+    )] = None,
 ) -> dict[str, Any]:
-    """Upload and process a receipt in a single call.
+    """Upload and process a receipt in a single call — the fastest way to go from image to structured data.
 
-    Combines upload_receipt + process_receipt. Costs 1 credit.
-
-    Args:
-        mime_type: MIME type of the file
-        url: Public URL of the receipt image or PDF
-        file_base64: Base64-encoded file content (alternative to URL)
-        company_context: Brief company description for better categorisation
-        preferred_currency: ISO 4217 currency code
-        force_category: Override auto-detected category
+    Combines upload_receipt + process_receipt into one step. Returns merchant,
+    date, totals, line items, tax, category, and confidence scores.
+    Costs 1 credit.
     """
     _ensure_init()
     import tools as _tools
@@ -146,15 +194,25 @@ async def upload_and_process(
     return result.model_dump()
 
 
-@mcp.tool()
-async def get_receipt_markdown(receipt_id: str) -> dict[str, Any]:
-    """Get a Markdown-formatted view of a processed receipt.
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Get Receipt Markdown",
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
+)
+async def get_receipt_markdown(
+    receipt_id: Annotated[str, Field(
+        description="The receipt_id of a previously processed receipt. The receipt must have been processed first via process_receipt.",
+    )],
+) -> dict[str, Any]:
+    """Get a clean Markdown-formatted view of a processed receipt.
 
-    Returns a clean Markdown representation including line items table,
-    tax summary, and confidence scores. Receipt must be processed first.
-
-    Args:
-        receipt_id: The receipt_id of a previously processed receipt
+    Returns a human-readable Markdown document with line items table,
+    tax summary, totals, and confidence scores. Perfect for reports or chat display.
+    Free — no credits consumed.
     """
     _ensure_init()
     import tools as _tools
@@ -163,19 +221,29 @@ async def get_receipt_markdown(receipt_id: str) -> dict[str, Any]:
     return {"receipt_id": result.receipt_id, "markdown": result.markdown}
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Suggest GL Account",
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 async def suggest_gl_account(
-    expense_json: dict,
-    chart_of_accounts_snippet: str | None = None,
+    expense_json: Annotated[dict, Field(
+        description="The structured_expense object returned by process_receipt. Contains merchant, amount, category, and line items.",
+    )],
+    chart_of_accounts_snippet: Annotated[str | None, Field(
+        description="Optional partial chart of accounts (as text) to match against. Include account codes and names for best results.",
+        default=None,
+    )] = None,
 ) -> dict[str, Any]:
-    """Suggest the best General Ledger account code for an expense.
+    """Suggest the best General Ledger account code for an expense using AI reasoning.
 
-    Given structured expense data (from process_receipt), uses AI reasoning
-    to map the expense to an appropriate GL account. Costs 1 credit.
-
-    Args:
-        expense_json: The structured_expense dict returned by process_receipt
-        chart_of_accounts_snippet: Optional partial chart of accounts to match against
+    Maps structured expense data to the most appropriate GL account. Provide your
+    chart of accounts for company-specific matching, or get standard GAAP suggestions.
+    Costs 1 credit.
     """
     _ensure_init()
     import tools as _tools
@@ -187,12 +255,21 @@ async def suggest_gl_account(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Check Balance",
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
+)
 async def check_balance() -> dict[str, Any]:
     """Check your current credit balance and subscription plan.
 
-    Free to call. Use this before process_receipt to verify sufficient credits.
-    Returns current credit count and plan name.
+    Returns your remaining credits and active plan (free, basic, or pro).
+    Call this before processing to verify you have enough credits.
+    Free — no credits consumed.
     """
     _ensure_init()
     import db
@@ -208,19 +285,32 @@ async def check_balance() -> dict[str, Any]:
     return {"credits": balance, "plan": plan}
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="List Receipts",
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
+)
 async def list_receipts(
-    limit: int = 50,
-    status: str | None = None,
+    limit: Annotated[int, Field(
+        description="Maximum number of receipts to return. Range: 1-200.",
+        default=50,
+        ge=1,
+        le=200,
+    )] = 50,
+    status: Annotated[str | None, Field(
+        description="Filter by receipt status. One of: uploaded, processing, processed, failed. Returns all statuses if omitted.",
+        default=None,
+    )] = None,
 ) -> dict[str, Any]:
-    """List your uploaded receipts with their status.
+    """List your uploaded receipts with their processing status.
 
-    Filter by status (uploaded, processing, processed, failed).
-    Returns receipt_id, status, mime_type, and timestamps.
-
-    Args:
-        limit: Max number of receipts to return (1-200)
-        status: Filter by receipt status
+    Returns receipt_id, status, MIME type, and timestamps for each receipt.
+    Use status filter to find receipts ready for processing or check failures.
+    Free — no credits consumed.
     """
     _ensure_init()
     import db
