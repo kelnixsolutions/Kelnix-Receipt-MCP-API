@@ -102,28 +102,45 @@ CreditAuth = Depends(require_credits)
 
 # ── App lifecycle ────────────────────────────────────────────────────────
 
+from mcp_server import mcp as _mcp_server
+from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
+from starlette.applications import Starlette
+from starlette.routing import Mount
+
+_mcp_session_manager = StreamableHTTPSessionManager(
+    app=_mcp_server._mcp_server,
+    stateless=True,
+)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _load_legacy_keys()
     db.init_db()
-    yield
+    async with _mcp_session_manager.run():
+        yield
 
 
 app = FastAPI(
     title="Kelnix Receipt MCP API",
-    version="3.1.0",
+    version="3.2.0",
     description=(
         "Agent-native MCP server that converts receipt images/PDFs into "
         "structured accounting-ready JSON. Discover tools at /mcp. "
-        "Phase 3: credit billing, Stripe + crypto payments, agent registration, webhooks."
+        "50 free credits on signup. Stripe + crypto payments."
     ),
     lifespan=lifespan,
 )
 
-# ── Mount MCP protocol (SSE) for Smithery and MCP clients ─────────────
+# ── Mount MCP protocol transports for Smithery and MCP clients ────────
 
-from mcp_server import mcp as _mcp_server
+async def _handle_mcp_stream(scope, receive, send):
+    await _mcp_session_manager.handle_request(scope, receive, send)
 
+_mcp_stream_app = Starlette(
+    routes=[Mount("/mcp", app=_handle_mcp_stream)],
+)
+app.mount("/stream", _mcp_stream_app)
 app.mount("/sse", _mcp_server.sse_app())
 
 
