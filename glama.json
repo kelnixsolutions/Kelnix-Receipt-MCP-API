@@ -1,0 +1,28 @@
+{
+  "name": "kelnix-receipt-mcp-api",
+  "display_name": "Kelnix Receipt MCP API",
+  "description": "AI-powered receipt processing API. Upload any receipt image or PDF and get structured, accounting-ready JSON — merchant, date, line items, tax breakdown, totals, currency, and confidence scores. Suggest GL account codes for instant bookkeeping. 50 free credits on signup.",
+  "icon": "https://receipt-mcp-api.kelnix.org/icon.png",
+  "homepage": "https://kelnix.org",
+  "repository": "https://github.com/kelnixsolutions/Kelnix-Receipt-MCP-API",
+  "license": "MIT",
+  "categories": ["finance", "accounting", "ai"],
+  "tags": ["receipt", "ocr", "accounting", "expense", "gl-account", "invoice", "bookkeeping"],
+  "endpoints": {
+    "mcp": "https://receipt-mcp-api.kelnix.org/stream/mcp/",
+    "docs": "https://receipt-mcp-api.kelnix.org/docs",
+    "pricing": "https://receipt-mcp-api.kelnix.org/pricing"
+  },
+  "tools": [
+    "receipts.upload",
+    "receipts.process",
+    "receipts.upload_and_process",
+    "receipts.get_markdown",
+    "receipts.list",
+    "accounting.suggest_gl_account",
+    "credits.check_balance"
+  ],
+  "related_servers": [
+    "kelnixsolutions/kelnix-datamind-curator"
+  ]
+}
