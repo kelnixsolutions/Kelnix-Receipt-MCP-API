@@ -677,6 +677,7 @@ async def process_receipt_endpoint(
             force_category=opts.force_category if opts else None,
         )
     except ValueError as e:
+        await refund_credits(_key, 1)  # refund — receipt not found, no work done
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         db.update_receipt(body.receipt_id, status="failed")
