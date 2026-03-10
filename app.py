@@ -100,6 +100,11 @@ async def require_credits(x_api_key: Annotated[str, Header()]) -> str:
 CreditAuth = Depends(require_credits)
 
 
+async def refund_credits(api_key: str, cost: int = 1) -> None:
+    """Refund credits when an operation fails after deduction."""
+    db.add_credits(api_key, cost, reason="refund_failed_operation")
+
+
 # ── App lifecycle ────────────────────────────────────────────────────────
 
 from mcp_server import mcp as _mcp_server
@@ -142,6 +147,21 @@ _mcp_stream_app = Starlette(
 )
 app.mount("/stream", _mcp_stream_app)
 app.mount("/sse", _mcp_server.sse_app())
+
+
+# ── Root endpoint ────────────────────────────────────────────────────────
+
+@app.get("/", tags=["System"])
+async def root():
+    return {
+        "service": "Kelnix Receipt MCP API",
+        "version": "3.3.0",
+        "docs": "/docs",
+        "mcp_endpoint": "/stream/mcp/",
+        "icon": "/icon.png",
+        "website": "https://kelnix.org",
+        "description": "AI-powered receipt processing API. Upload any receipt and get structured, accounting-ready JSON.",
+    }
 
 
 # ── Request ID middleware ────────────────────────────────────────────────
@@ -452,6 +472,12 @@ async def billing_webhook(request: Request):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@app.post("/billing/stripe_webhook", tags=["Billing"], include_in_schema=False)
+async def stripe_webhook_alias(request: Request):
+    """Alias for /billing/webhook for compatibility."""
+    return await billing_webhook(request)
+
+
 @app.post(
     "/billing/buy_credits_crypto",
     response_model=BuyCreditsCryptoResponse,
@@ -654,6 +680,7 @@ async def process_receipt_endpoint(
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         db.update_receipt(body.receipt_id, status="failed")
+        await refund_credits(_key, 1)  # refund the credit
         raise HTTPException(status_code=500, detail=f"Processing failed: {e}")
 
 
@@ -765,6 +792,7 @@ async def suggest_gl_account_endpoint(
             chart_of_accounts_snippet=body.chart_of_accounts_snippet,
         )
     except Exception as e:
+        await refund_credits(_key, 1)  # refund the credit
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -849,6 +877,7 @@ async def upload_and_process_endpoint(
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
+        await refund_credits(_key, 1)  # refund on failure
         raise HTTPException(status_code=500, detail=f"Processing failed: {e}")
 
 
