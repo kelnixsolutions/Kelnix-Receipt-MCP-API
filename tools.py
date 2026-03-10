@@ -172,12 +172,21 @@ async def process_receipt(
     user_parts.append({"type": "text", "text": prompt_text})
 
     client = _get_client()
-    response = await client.messages.create(
-        model=VISION_MODEL,
-        max_tokens=2048,
-        system=EXTRACTION_SYSTEM,
-        messages=[{"role": "user", "content": user_parts}],
-    )
+    try:
+        response = await client.messages.create(
+            model=VISION_MODEL,
+            max_tokens=2048,
+            system=EXTRACTION_SYSTEM,
+            messages=[{"role": "user", "content": user_parts}],
+        )
+    except anthropic.AuthenticationError:
+        raise RuntimeError("AI service authentication failed. Please contact support.")
+    except anthropic.RateLimitError:
+        raise RuntimeError("AI service is temporarily overloaded. Please try again in a few moments.")
+    except anthropic.APIStatusError as e:
+        raise RuntimeError(f"AI service unavailable (status {e.status_code}). Please try again later.")
+    except anthropic.APIConnectionError:
+        raise RuntimeError("Could not connect to AI service. Please try again later.")
 
     raw_text = response.content[0].text.strip()
     if raw_text.startswith("```"):
@@ -246,11 +255,20 @@ async def suggest_gl_account(
     )
 
     client = _get_client()
-    response = await client.messages.create(
-        model=VISION_MODEL,
-        max_tokens=512,
-        messages=[{"role": "user", "content": prompt}],
-    )
+    try:
+        response = await client.messages.create(
+            model=VISION_MODEL,
+            max_tokens=512,
+            messages=[{"role": "user", "content": prompt}],
+        )
+    except anthropic.AuthenticationError:
+        raise RuntimeError("AI service authentication failed. Please contact support.")
+    except anthropic.RateLimitError:
+        raise RuntimeError("AI service is temporarily overloaded. Please try again in a few moments.")
+    except anthropic.APIStatusError as e:
+        raise RuntimeError(f"AI service unavailable (status {e.status_code}). Please try again later.")
+    except anthropic.APIConnectionError:
+        raise RuntimeError("Could not connect to AI service. Please try again later.")
 
     raw_text = response.content[0].text.strip()
     if raw_text.startswith("```"):

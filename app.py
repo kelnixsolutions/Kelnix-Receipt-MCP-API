@@ -677,11 +677,15 @@ async def process_receipt_endpoint(
             force_category=opts.force_category if opts else None,
         )
     except ValueError as e:
-        await refund_credits(_key, 1)  # refund — receipt not found, no work done
+        await refund_credits(_key, 1)
         raise HTTPException(status_code=404, detail=str(e))
+    except RuntimeError as e:
+        db.update_receipt(body.receipt_id, status="failed")
+        await refund_credits(_key, 1)
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         db.update_receipt(body.receipt_id, status="failed")
-        await refund_credits(_key, 1)  # refund the credit
+        await refund_credits(_key, 1)
         raise HTTPException(status_code=500, detail=f"Processing failed: {e}")
 
 
@@ -792,8 +796,11 @@ async def suggest_gl_account_endpoint(
             body.expense_json,
             chart_of_accounts_snippet=body.chart_of_accounts_snippet,
         )
+    except RuntimeError as e:
+        await refund_credits(_key, 1)
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
-        await refund_credits(_key, 1)  # refund the credit
+        await refund_credits(_key, 1)
         raise HTTPException(status_code=500, detail=str(e))
 
 
