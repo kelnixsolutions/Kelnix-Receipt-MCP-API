@@ -222,6 +222,12 @@ async def create_crypto_payment(
     elif not credits and not fiat_usd:
         raise ValueError("Provide either credits or fiat_usd")
 
+    if fiat_usd < 20:
+        raise ValueError(
+            f"Minimum crypto payment is $20.00 (requested ${fiat_usd:.2f}). "
+            f"Choose a larger credit pack (500+ credits) or pay with Stripe for smaller amounts."
+        )
+
     estimate = await crypto_gateway.get_estimated_price(
         fiat_usd, "usd", preferred_coin
     )

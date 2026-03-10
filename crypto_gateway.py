@@ -79,6 +79,14 @@ async def create_payment(
 
     client = _get_client()
     resp = await client.post("/payment", json=payload)
+    if resp.status_code == 400:
+        error = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+        if error.get("code") == "AMOUNT_MINIMAL_ERROR":
+            raise ValueError(
+                f"Amount too low for {crypto_currency.upper()}. "
+                f"Try a larger credit pack or use a stablecoin like USDT or USDC."
+            )
+        raise ValueError(f"Payment creation failed: {error.get('message', resp.text)}")
     if resp.status_code not in (200, 201):
         raise ValueError(
             f"NOWPayments payment creation failed ({resp.status_code}). "
