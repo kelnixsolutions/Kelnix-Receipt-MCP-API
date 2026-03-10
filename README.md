@@ -8,6 +8,10 @@
 
 Built for AI agents that automate expense management, accounts payable, and bookkeeping. No dashboard, no login — just an API that speaks MCP.
 
+<a href="https://glama.ai/mcp/servers/kelnixsolutions/kelnix-receipt-mcp-api">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/kelnixsolutions/kelnix-receipt-mcp-api/badge" alt="kelnix-receipt-mcp-api MCP server" />
+</a>
+
 🎁 **50 free credits on signup. No credit card required.**
 
 🌐 **Live at** `receipt-mcp-api.kelnix.org` — [Interactive Docs](https://receipt-mcp-api.kelnix.org/docs)
