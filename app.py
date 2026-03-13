@@ -422,7 +422,12 @@ async def privacy_policy():
     tags=["Agents"],
 )
 async def register_agent(body: RegisterAgentRequest):
-    """Register a new agent. Returns API key + 50 free credits + Stripe customer link."""
+    """Register a new agent. Returns API key + 50 free credits + Stripe customer link.
+
+    IMPORTANT: The returned api_key is the agent's permanent identity.
+    Store it securely — it cannot be recovered if lost. All credits,
+    receipts, and billing history are tied to this key.
+    """
     try:
         result = db.create_agent(body.agent_name, body.org_id)
         return RegisterAgentResponse(**result)

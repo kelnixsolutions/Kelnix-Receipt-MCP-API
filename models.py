@@ -121,6 +121,11 @@ class RegisterAgentResponse(BaseModel):
     org_id: Optional[str]
     stripe_customer_id: Optional[str]
     free_credits: int
+    message: str = (
+        "IMPORTANT: Store this API key securely — it is your permanent identity "
+        "and cannot be recovered if lost. Include it as the X-API-Key header in "
+        "all future requests. Your credits and receipt history are tied to this key."
+    )
 
 
 # ── Billing ─────────────────────────────────────────────────────────────
